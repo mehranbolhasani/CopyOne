@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Build output (optional - some prefer to commit code.js for easy Figma import)
+# code.js
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor directories
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment files
+.env
+.env.local
+
+# Temporary files
+*.tmp
+*.temp
