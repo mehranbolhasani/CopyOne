@@ -12,12 +12,13 @@ interface CornerRadii {
 }
 
 interface TextStyles {
-  fontSize: number;
-  fontName: FontName;
-  lineHeight: LineHeight;
-  letterSpacing: LetterSpacing;
-  textCase: TextCase;
-  textDecoration: TextDecoration;
+  fontSize?: number;
+  fontName?: FontName;
+  lineHeight?: LineHeight;
+  letterSpacing?: LetterSpacing;
+  textCase?: TextCase;
+  textDecoration?: TextDecoration;
+  hasMixedValues?: boolean;
 }
 
 interface StoredProperties {
@@ -55,12 +56,16 @@ interface StoredProperties {
 type MessageToPlugin =
   | { type: "copy" }
   | { type: "paste"; properties: string[] }
-  | { type: "get-selection" };
+  | { type: "get-selection" }
+  | { type: "resize-ui"; height: number };
 
 type MessageToUI =
+  | { type: "version"; version: string }
+  | { type: "build-info"; devLabel: string; buildStamp: string }
   | { type: "selection-changed"; hasSelection: boolean; nodeName?: string; nodeType?: string }
   | { type: "properties-copied"; properties: StoredProperties; availableProperties: string[] }
   | { type: "paste-complete"; success: boolean; message: string }
+  | { type: "info"; message: string }
   | { type: "error"; message: string };
 
 // ============================================================================
@@ -68,6 +73,12 @@ type MessageToUI =
 // ============================================================================
 
 let storedProperties: StoredProperties | null = null;
+const PLUGIN_VERSION = "__PLUGIN_VERSION__";
+const PLUGIN_BUILD_STAMP = "__PLUGIN_BUILD_STAMP__";
+const PLUGIN_DEV_LABEL = "__PLUGIN_DEV_LABEL__";
+const UI_WIDTH = 280;
+const UI_MIN_HEIGHT = 420;
+const UI_MAX_HEIGHT = 1200;
 
 // ============================================================================
 // Property Extraction Functions
@@ -157,29 +168,59 @@ function extractTextStyles(node: SceneNode): Pick<StoredProperties, "textStyles"
   }
 
   const textNode = node as TextNode;
+  const styles: TextStyles = {};
+  let hasMixed = false;
 
-  // Only extract if values are not mixed
-  if (
-    textNode.fontSize === figma.mixed ||
-    textNode.fontName === figma.mixed ||
-    textNode.lineHeight === figma.mixed ||
-    textNode.letterSpacing === figma.mixed ||
-    textNode.textCase === figma.mixed ||
-    textNode.textDecoration === figma.mixed
-  ) {
+  if (textNode.fontSize !== figma.mixed) {
+    styles.fontSize = textNode.fontSize;
+  } else {
+    hasMixed = true;
+  }
+
+  if (textNode.fontName !== figma.mixed) {
+    styles.fontName = textNode.fontName;
+  } else {
+    hasMixed = true;
+  }
+
+  if (textNode.lineHeight !== figma.mixed) {
+    styles.lineHeight = textNode.lineHeight;
+  } else {
+    hasMixed = true;
+  }
+
+  if (textNode.letterSpacing !== figma.mixed) {
+    styles.letterSpacing = textNode.letterSpacing;
+  } else {
+    hasMixed = true;
+  }
+
+  if (textNode.textCase !== figma.mixed) {
+    styles.textCase = textNode.textCase;
+  } else {
+    hasMixed = true;
+  }
+
+  if (textNode.textDecoration !== figma.mixed) {
+    styles.textDecoration = textNode.textDecoration;
+  } else {
+    hasMixed = true;
+  }
+
+  // If no non-mixed properties were extracted, skip entirely
+  const hasAnyStyle = styles.fontSize !== undefined || styles.fontName !== undefined ||
+    styles.lineHeight !== undefined || styles.letterSpacing !== undefined ||
+    styles.textCase !== undefined || styles.textDecoration !== undefined;
+
+  if (!hasAnyStyle) {
     return {};
   }
 
-  return {
-    textStyles: {
-      fontSize: textNode.fontSize as number,
-      fontName: textNode.fontName as FontName,
-      lineHeight: textNode.lineHeight as LineHeight,
-      letterSpacing: textNode.letterSpacing as LetterSpacing,
-      textCase: textNode.textCase as TextCase,
-      textDecoration: textNode.textDecoration as TextDecoration,
-    },
-  };
+  if (hasMixed) {
+    styles.hasMixedValues = true;
+  }
+
+  return { textStyles: styles };
 }
 
 function extractAllProperties(node: SceneNode): StoredProperties {
@@ -198,7 +239,7 @@ function extractAllProperties(node: SceneNode): StoredProperties {
 function getAvailableProperties(props: StoredProperties): string[] {
   const available: string[] = [];
 
-  if (props.fills !== undefined) available.push("fills");
+  if (props.fills !== undefined && props.fills !== figma.mixed) available.push("fills");
   if (props.strokes !== undefined) available.push("strokes");
   if (props.effects !== undefined) available.push("effects");
   if (props.cornerRadius !== undefined) available.push("cornerRadius");
@@ -213,13 +254,11 @@ function getAvailableProperties(props: StoredProperties): string[] {
 // ============================================================================
 
 function applyFills(node: SceneNode, props: StoredProperties): boolean {
-  if (props.fills === undefined) return false;
+  if (props.fills === undefined || props.fills === figma.mixed) return false;
   if (!("fills" in node)) return false;
 
   try {
-    if (props.fills !== figma.mixed) {
-      (node as GeometryMixin).fills = [...props.fills];
-    }
+    (node as GeometryMixin).fills = [...props.fills];
     return true;
   } catch {
     return false;
@@ -319,17 +358,24 @@ async function applyTextStyles(node: SceneNode, props: StoredProperties): Promis
 
   try {
     const textNode = node as TextNode;
-    const { fontName, fontSize, lineHeight, letterSpacing, textCase, textDecoration } = props.textStyles;
+    const styles = props.textStyles;
 
     // Must load font before applying text styles
-    await figma.loadFontAsync(fontName);
+    if (styles.fontName) {
+      await figma.loadFontAsync(styles.fontName);
+      textNode.fontName = styles.fontName;
+    } else {
+      // Load existing font to allow other text property changes
+      if (textNode.fontName !== figma.mixed) {
+        await figma.loadFontAsync(textNode.fontName);
+      }
+    }
 
-    textNode.fontName = fontName;
-    textNode.fontSize = fontSize;
-    textNode.lineHeight = lineHeight;
-    textNode.letterSpacing = letterSpacing;
-    textNode.textCase = textCase;
-    textNode.textDecoration = textDecoration;
+    if (styles.fontSize !== undefined) textNode.fontSize = styles.fontSize;
+    if (styles.lineHeight !== undefined) textNode.lineHeight = styles.lineHeight;
+    if (styles.letterSpacing !== undefined) textNode.letterSpacing = styles.letterSpacing;
+    if (styles.textCase !== undefined) textNode.textCase = styles.textCase;
+    if (styles.textDecoration !== undefined) textNode.textDecoration = styles.textDecoration;
 
     return true;
   } catch {
@@ -437,6 +483,13 @@ async function handleCopy(): Promise<void> {
     availableProperties,
   } as MessageToUI);
 
+  if (storedProperties.textStyles?.hasMixedValues) {
+    figma.ui.postMessage({
+      type: "info",
+      message: "Some text styles were skipped due to mixed values.",
+    } as MessageToUI);
+  }
+
   figma.notify(`Copied properties from "${node.name}"`);
 }
 
@@ -495,10 +548,20 @@ async function handlePaste(propertiesToPaste: string[]): Promise<void> {
 
 // Show the UI panel
 figma.showUI(__html__, {
-  width: 280,
-  height: 420,
+  width: UI_WIDTH,
+  height: 560,
   title: "CopyOne",
 });
+
+figma.ui.postMessage({
+  type: "version",
+  version: PLUGIN_VERSION,
+} as MessageToUI);
+figma.ui.postMessage({
+  type: "build-info",
+  devLabel: PLUGIN_DEV_LABEL,
+  buildStamp: PLUGIN_BUILD_STAMP,
+} as MessageToUI);
 
 // Listen for selection changes
 figma.on("selectionchange", () => {
@@ -518,7 +581,22 @@ figma.ui.onmessage = async (msg: MessageToPlugin) => {
       await handlePaste(msg.properties);
       break;
     case "get-selection":
+      figma.ui.postMessage({
+        type: "version",
+        version: PLUGIN_VERSION,
+      } as MessageToUI);
+      figma.ui.postMessage({
+        type: "build-info",
+        devLabel: PLUGIN_DEV_LABEL,
+        buildStamp: PLUGIN_BUILD_STAMP,
+      } as MessageToUI);
       sendSelectionUpdate();
+      break;
+    case "resize-ui":
+      if (Number.isFinite(msg.height)) {
+        const nextHeight = Math.max(UI_MIN_HEIGHT, Math.min(UI_MAX_HEIGHT, Math.ceil(msg.height)));
+        figma.ui.resize(UI_WIDTH, nextHeight);
+      }
       break;
   }
 };

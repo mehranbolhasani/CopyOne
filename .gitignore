@@ -1,8 +1,8 @@
 # Dependencies
 node_modules/
 
-# Build output (optional - some prefer to commit code.js for easy Figma import)
-# code.js
+# Build output — run `npm run build` to generate code.js
+code.js
 
 # OS files
 .DS_Store

@@ -25,46 +25,83 @@
       --radius: 6px;
     }
 
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+    }
+
     body {
       font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       font-size: 12px;
       background: var(--bg-primary);
       color: var(--text-primary);
       padding: 16px;
-      min-height: 100vh;
+      min-height: auto;
     }
 
     .header {
       text-align: center;
       margin-bottom: 20px;
-      padding-bottom: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 12px;
+    }
 
-      .header-icon {
-        width: 36px;
-        height: 36px;
-        margin-bottom: 12px;
-        margin-inline: auto;
-      }
+    .header-content {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      justify-content: flex-start;
+      text-align: left;
+      gap: 4px;
+    }
+
+    .header-title {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .header-icon {
+      width: 38px;
+      height: 38px;
     }
 
     .header h1 {
-      font-size: 16px;
+      font-size: 14px;
       font-weight: 600;
       letter-spacing: -0.5px;
-      margin-bottom: 4px;
       color: var(--accent);
     }
 
     .header p {
       color: var(--text-muted);
-      font-size: 12px;
+      font-size: 10px;
+    }
+
+    .version {
+      color: var(--accent);
+      background: var(--bg-secondary);
+      font-size: 8px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: calc(var(--radius) * 4);
+    }
+
+    .copy-section-container {
+        border: 1px solid var(--bg-secondary);
+        padding: 4px;
+        border-radius: calc(var(--radius) + 4px);
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        margin-bottom: 20px;
     }
 
     .selection-status {
-      background: var(--bg-secondary);
-      border-radius: var(--radius);
-      padding: 16px 12px;
-      margin-bottom: 12px;
+      padding: 8px 12px;
     }
 
     .selection-status .label {
@@ -134,8 +171,15 @@
       color: white;
     }
 
+    .properties-section-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom:6px;
+      }
+
     .copy-section {
-      margin-bottom: 20px;
+      margin-bottom: 0;
     }
 
     .copied-info {
@@ -158,7 +202,7 @@
     }
 
     .properties-section {
-      margin-bottom: 20px;
+      margin-bottom: 0;
     }
 
     .section-title {
@@ -167,7 +211,6 @@
       text-transform: uppercase;
       letter-spacing: 0.5px;
       color: var(--text-secondary);
-      margin-bottom: 12px;
     }
 
     .properties-list {
@@ -256,10 +299,15 @@
       color: var(--warning);
     }
 
+    .message.info {
+      background: rgba(79, 70, 229, 0.1);
+      border: 1px solid rgba(79, 70, 229, 0.3);
+      color: var(--accent);
+    }
+
     .select-all-row {
       display: flex;
       justify-content: flex-end;
-      margin-bottom: 8px;
     }
 
     .select-all-btn {
@@ -287,32 +335,41 @@
     <div class="header-icon">
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><rect width="24" height="24" fill="#eef2ff" rx="6"/><g clip-path="url(#a)"><path stroke="#4f46e5" stroke-linecap="round" stroke-linejoin="round" d="M14.25 7.5h1.125A1.125 1.125 0 0 1 16.5 8.625V16.5a1.125 1.125 0 0 1-1.125 1.125h-6.75A1.125 1.125 0 0 1 7.5 16.5V8.625A1.125 1.125 0 0 1 8.625 7.5H9.75M12 11.438h2.25M12 14.25h2.25m-4.5-2.812h.006M9.75 14.25h.006m.556-7.875h3.376c.31 0 .562.252.562.563v1.125c0 .31-.252.562-.562.562h-3.376a.56.56 0 0 1-.562-.562V6.937c0-.31.252-.562.563-.562"/></g><defs><clipPath id="a"><path fill="#fff" d="M5.25 5.25h13.5v13.5H5.25z"/></clipPath></defs></svg>
     </div>
-    <h1>CopyOne</h1>
-    <p>Copy and paste specific properties</p>
+    <div class="header-content">
+      <div class="header-title">
+        <h1>CopyOne</h1>
+        <p class="version" id="versionLabel"></p>
+      </div>
+      <p>Copy and paste specific properties</p>
+    </div>
   </div>
 
-  <div class="selection-status empty" id="selectionStatus">
-    <div class="label">Current Selection</div>
-    <div class="value" id="selectionValue">No selection</div>
-  </div>
-
-  <div class="copy-section">
-    <button class="btn btn-primary" id="copyBtn" disabled>
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-      </svg>
-      Copy Properties
-    </button>
-    <div class="copied-info" id="copiedInfo">
-      Copied from: <span class="source-name" id="sourceName"></span>
+  <div class="copy-section-container">
+    <div class="selection-status empty" id="selectionStatus">
+      <div class="label">Current Selection</div>
+      <div class="value" id="selectionValue">No selection</div>
+    </div>
+  
+    <div class="copy-section">
+      <button class="btn btn-primary" id="copyBtn" disabled>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+        </svg>
+        Copy Properties
+      </button>
+      <div class="copied-info" id="copiedInfo">
+        Copied from: <span class="source-name" id="sourceName"></span>
+      </div>
     </div>
   </div>
 
   <div class="properties-section">
-    <div class="section-title">Properties to Paste</div>
-    <div class="select-all-row">
-      <button class="select-all-btn" id="selectAllBtn" disabled>Select All</button>
+    <div class="properties-section-header">
+      <div class="section-title">Properties to Paste</div>
+      <div class="select-all-row">
+        <button class="select-all-btn" id="selectAllBtn" disabled>Select All</button>
+      </div>
     </div>
     <div class="properties-list" id="propertiesList">
       <div class="property-item disabled" data-property="fills">
@@ -395,10 +452,23 @@
     const copyBtn = document.getElementById('copyBtn');
     const copiedInfo = document.getElementById('copiedInfo');
     const sourceName = document.getElementById('sourceName');
+    const versionLabel = document.getElementById('versionLabel');
     const propertiesList = document.getElementById('propertiesList');
     const selectAllBtn = document.getElementById('selectAllBtn');
     const pasteBtn = document.getElementById('pasteBtn');
     const message = document.getElementById('message');
+    let resizeRafId = null;
+
+    function requestResize() {
+      if (resizeRafId !== null) {
+        cancelAnimationFrame(resizeRafId);
+      }
+      resizeRafId = requestAnimationFrame(() => {
+        resizeRafId = null;
+        const height = document.documentElement.scrollHeight;
+        parent.postMessage({ pluginMessage: { type: 'resize-ui', height } }, '*');
+      });
+    }
 
     // Property checkboxes
     const propertyCheckboxes = {
@@ -416,20 +486,23 @@
       
       if (data.hasSelection) {
         selectionStatus.classList.remove('empty');
-        if (data.nodeType === 'MULTIPLE') {
-          selectionValue.innerHTML = `<span>${data.nodeName}</span>`;
-        } else {
-          selectionValue.innerHTML = `
-            <span>${data.nodeName}</span>
-            <span class="type-badge">${data.nodeType}</span>
-          `;
+        selectionValue.textContent = '';
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = data.nodeName;
+        selectionValue.appendChild(nameSpan);
+        if (data.nodeType !== 'MULTIPLE') {
+          const badge = document.createElement('span');
+          badge.className = 'type-badge';
+          badge.textContent = data.nodeType;
+          selectionValue.appendChild(badge);
         }
       } else {
         selectionStatus.classList.add('empty');
-        selectionValue.innerHTML = 'No selection';
+        selectionValue.textContent = 'No selection';
       }
 
       updateButtonStates();
+      requestResize();
     }
 
     // Update available properties after copy
@@ -459,6 +532,7 @@
 
       selectAllBtn.disabled = availableProperties.length === 0;
       updateButtonStates();
+      requestResize();
     }
 
     // Update button states
@@ -476,22 +550,46 @@
         .map(([prop, _]) => prop);
     }
 
+    let messageTimer = null;
+
     // Show message
     function showMessage(text, type) {
+      if (messageTimer) {
+        clearTimeout(messageTimer);
+        messageTimer = null;
+      }
       message.textContent = text;
       message.className = `message visible ${type}`;
-      
-      setTimeout(() => {
-        message.classList.remove('visible');
-      }, 4000);
+
+      // Auto-hide success and info messages; errors stay until next action
+      if (type !== 'error') {
+        messageTimer = setTimeout(() => {
+          message.classList.remove('visible');
+          messageTimer = null;
+          requestResize();
+        }, 4000);
+      }
+      requestResize();
+    }
+
+    // Dismiss persistent messages on next user action
+    function dismissMessage() {
+      if (messageTimer) {
+        clearTimeout(messageTimer);
+        messageTimer = null;
+      }
+      message.classList.remove('visible');
+      requestResize();
     }
 
     // Event Listeners
     copyBtn.addEventListener('click', () => {
+      dismissMessage();
       parent.postMessage({ pluginMessage: { type: 'copy' } }, '*');
     });
 
     pasteBtn.addEventListener('click', () => {
+      dismissMessage();
       const properties = getSelectedProperties();
       parent.postMessage({ pluginMessage: { type: 'paste', properties } }, '*');
     });
@@ -522,6 +620,10 @@
       if (!msg) return;
 
       switch (msg.type) {
+        case 'version':
+          versionLabel.textContent = `v${msg.version}`;
+          requestResize();
+          break;
         case 'selection-changed':
           updateSelectionUI(msg);
           break;
@@ -531,6 +633,9 @@
         case 'paste-complete':
           showMessage(msg.message, msg.success ? 'success' : 'error');
           break;
+        case 'info':
+          showMessage(msg.message, 'info');
+          break;
         case 'error':
           showMessage(msg.message, 'error');
           break;
@@ -539,6 +644,7 @@
 
     // Request initial selection state
     parent.postMessage({ pluginMessage: { type: 'get-selection' } }, '*');
+    requestResize();
   </script>
 </body>
 </html>
