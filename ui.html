@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
+    /* House style: sentence case only — never text-transform: uppercase */
+
     * {
       box-sizing: border-box;
       margin: 0;
@@ -12,18 +14,60 @@
 
     :root {
       --bg-primary: #ffffff;
-      --bg-secondary: #e2e8f0;
-      --bg-tertiary: #cbd5e1;
-      --text-primary: #0f172a;
-      --text-secondary: #334155;
-      --text-muted: #64748b;
-      --accent: #2563eb;
-      --accent-hover: #1e40af;
+      --bg-secondary: #f1f3f4;
+      --bg-tertiary: #e3e5e8;
+      --bg-surface: #f8f9fa;
+      --text-primary: #1a1a1a;
+      --text-secondary: #5f6368;
+      --text-muted: #80868b;
+      --accent: #4F46E5;
+      --accent-hover: #4338CA;
+      --accent-bg: #EEF2FF;
       --success: #1bc47d;
+      --success-bg: rgba(27, 196, 125, 0.1);
+      --success-border: rgba(27, 196, 125, 0.3);
       --warning: #f24822;
-      --border: #94a3b8;
+      --warning-bg: rgba(242, 72, 34, 0.1);
+      --warning-border: rgba(242, 72, 34, 0.3);
+      --info-bg: rgba(79, 70, 229, 0.08);
+      --info-border: rgba(79, 70, 229, 0.2);
+      --border: #dadce0;
+      --border-light: #e8eaed;
+      --swatch-border: rgba(0, 0, 0, 0.15);
+      --btn-primary-bg: var(--accent);
+      --btn-primary-hover-bg: var(--accent-hover);
       --radius: 6px;
       --space: 4px;
+    }
+
+    /* Figma does not inject theme classes reliably from the plugin iframe.
+       Fall back to prefers-color-scheme media query for dark mode. */
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg-primary: #1e1e1e;
+        --bg-secondary: #2d2d2d;
+        --bg-tertiary: #383838;
+        --bg-surface: #252525;
+        --text-primary: #e8e8e8;
+        --text-secondary: #9aa0a6;
+        --text-muted: #80868b;
+        --accent: #A5B4FC;
+        --accent-hover: #C7D2FE;
+        --accent-bg: rgba(79, 70, 229, 0.15);
+        --success: #34d399;
+        --success-bg: rgba(52, 211, 153, 0.1);
+        --success-border: rgba(52, 211, 153, 0.25);
+        --warning: #f87171;
+        --warning-bg: rgba(248, 113, 113, 0.1);
+        --warning-border: rgba(248, 113, 113, 0.25);
+        --info-bg: rgba(165, 180, 252, 0.1);
+        --info-border: rgba(165, 180, 252, 0.18);
+        --border: #3c4043;
+        --border-light: #333333;
+        --swatch-border: rgba(255, 255, 255, 0.2);
+        --btn-primary-bg: #4F46E5;
+        --btn-primary-hover-bg: #4338CA;
+      }
     }
 
     html, body {
@@ -40,25 +84,30 @@
       min-height: fit-content;
     }
 
-    section.top-section {
-      padding: calc(var(--space) * 6) calc(var(--space) * 4);
-      background: oklch(from var(--accent) l c h / 0.05);
-      display: flex;
-      flex-direction: column;
-      gap: calc(var(--space) * 4);
-      position: relative;
-  }
+    /* ---- Zones ---- */
 
-  section.bottom-section {
-    padding: calc(var(--space) * 4);
-    display: flex;
-    flex-direction: column;
-    gap: calc(var(--space) * 4);
-    position: relative;
-  }
+    .zone {
+      padding: calc(var(--space) * 3) calc(var(--space) * 4);
+    }
+
+    .zone + .zone {
+      border-top: 1px solid var(--border);
+    }
+
+    .zone-label {
+      font-size: 10px;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-bottom: calc(var(--space) * 2);
+    }
+
+    /* ---- Header ---- */
+
+    .header-zone {
+      padding: calc(var(--space) * 4) calc(var(--space) * 4);
+    }
 
     .header {
-      text-align: left;
       display: flex;
       align-items: center;
       justify-content: flex-start;
@@ -69,15 +118,13 @@
       display: flex;
       flex-direction: column;
       align-items: flex-start;
-      justify-content: flex-start;
-      text-align: left;
-      gap: 4px;
+      gap: 2px;
     }
 
     .header-title {
       display: flex;
       align-items: center;
-      gap: 4px;
+      gap: 6px;
     }
 
     .header-icon {
@@ -99,54 +146,98 @@
 
     .version {
       color: var(--accent);
-      background: var(--bg-secondary);
+      background: var(--accent-bg);
       font-size: 8px;
       font-weight: 600;
       padding: 2px 6px;
       border-radius: calc(var(--radius) * 4);
     }
 
-    .copy-section-container {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-    }
+    /* ---- Clipboard zone ---- */
 
-    .selection-status {
-      padding: 8px 12px;
-    }
-
-    .selection-status .label {
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: var(--text-muted);
-      margin-bottom: 6px;
-    }
-
-    .selection-status .value {
-      font-weight: 500;
+    .clipboard-source {
+      padding: 6px 10px;
+      background: var(--bg-surface);
+      border-radius: var(--radius);
+      margin-bottom: calc(var(--space) * 3);
+      font-size: 11px;
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
+      min-height: 28px;
+      min-width: 0;
     }
 
-    .selection-status .value .type-badge {
-      font-size: 9px;
-      background: var(--bg-tertiary);
-      padding: 2px 6px;
-      border-radius: 3px;
-      color: var(--text-secondary);
-    }
-
-    .selection-status.empty .value {
+    .clipboard-source-empty {
       color: var(--text-muted);
       font-style: italic;
     }
 
+    .clipboard-source-name {
+      font-weight: 500;
+      color: var(--text-primary);
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .clipboard-source-badge {
+      font-size: 9px;
+      background: var(--accent-bg);
+      color: var(--accent);
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-weight: 500;
+      flex-shrink: 0;
+    }
+
+    .clipboard-source-icon {
+      flex-shrink: 0;
+      color: var(--accent);
+    }
+
+    /* ---- Target info ---- */
+
+    .target-info {
+      padding: 6px 0;
+      margin-bottom: calc(var(--space) * 1);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      min-width: 0;
+    }
+
+    .target-info-empty {
+      color: var(--text-muted);
+      font-style: italic;
+    }
+
+    .target-info-name {
+      font-weight: 500;
+      color: var(--text-primary);
+      flex: 1;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .target-info-badge {
+      font-size: 9px;
+      background: var(--bg-tertiary);
+      padding: 1px 6px;
+      border-radius: 3px;
+      color: var(--text-secondary);
+    }
+
+    /* ---- Buttons ---- */
+
     .btn {
       width: 100%;
-      padding: 10px 16px;
+      padding: 8px 12px;
       border: none;
       border-radius: var(--radius);
       font-size: 12px;
@@ -156,96 +247,53 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 8px;
+      gap: 6px;
     }
 
     .btn:disabled {
-      opacity: 0.5;
+      opacity: 0.4;
       cursor: not-allowed;
     }
 
     .btn-primary {
-      background: var(--accent);
-      color: white;
+      background: var(--btn-primary-bg);
+      color: #ffffff;
     }
 
     .btn-primary:hover:not(:disabled) {
-      background: var(--accent-hover);
+      background: var(--btn-primary-hover-bg);
     }
 
     .btn-secondary {
-      background: var(--accent);
-      color: white;
+      background: transparent;
+      color: var(--accent);
+      border: 1px solid var(--accent);
     }
 
     .btn-secondary:hover:not(:disabled) {
-      background: var(--accent-hover);
-      color: white;
+      background: var(--accent-bg);
     }
 
-    .properties-section-header {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          margin-bottom:6px;
-      }
-
-    .copy-section {
-      margin-bottom: 0;
+    .shortcut-hint {
+      font-size: 9px;
+      opacity: 0.65;
+      margin-left: auto;
     }
 
-    .copied-info {
-    padding: 6px 10px;
-    background: rgba(27, 196, 125, 0.05);
-    border: 1px solid rgba(27, 196, 125, 1);
-    border-radius: calc(var(--radius) * 4);
-    font-size: 11px;
-    color: var(--success);
-    display: none;
-    position: absolute;
-    bottom: -12px;
-    left: 50%;
-    transform: translateX(-50%);
-    font-weight: bold;
-    text-transform: uppercase;
-}
-
-    .copied-info.visible {
-      display: block;
-    }
-
-    .copied-info .source-name {
-    font-weight: 600;
-    width: 0;
-    display: inline-block;
-    opacity: 0;
-    visibility: hidden;
-    height: 0;
-}
-
-    .properties-section {
-      margin-bottom: 0;
-    }
-
-    .section-title {
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: var(--text-secondary);
-    }
+    /* ---- Properties list (paste zone) ---- */
 
     .properties-list {
       display: flex;
       flex-direction: column;
       gap: 2px;
+      margin-top: calc(var(--space) * 1);
     }
 
     .property-item {
       display: flex;
       align-items: center;
-      gap: 10px;
-      padding: 8px 10px;
+      gap: 8px;
+      padding: 6px 8px;
       background: var(--bg-secondary);
       border-radius: var(--radius);
       transition: background 0.15s ease;
@@ -265,6 +313,7 @@
       height: 14px;
       accent-color: var(--accent);
       cursor: pointer;
+      flex-shrink: 0;
     }
 
     .property-item label {
@@ -272,7 +321,8 @@
       cursor: pointer;
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
+      min-width: 0;
     }
 
     .property-item .icon {
@@ -282,6 +332,7 @@
       align-items: center;
       justify-content: center;
       color: var(--text-muted);
+      flex-shrink: 0;
     }
 
     .property-item .icon svg {
@@ -291,18 +342,131 @@
 
     .property-item .name {
       font-weight: 500;
+      white-space: nowrap;
     }
+
+    /* ---- Previews ---- */
+
+    .preview {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+      margin-left: auto;
+    }
+
+    .preview-text {
+      font-size: 10px;
+      color: var(--text-muted);
+      max-width: 90px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .preview-text.partial {
+      color: var(--warning);
+    }
+
+    .preview-swatches {
+      display: flex;
+      gap: 1px;
+      flex-shrink: 0;
+    }
+
+    .swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 2px;
+      border: 1px solid var(--swatch-border);
+      flex-shrink: 0;
+    }
+
+    .swatch-image {
+      width: 12px;
+      height: 12px;
+      border-radius: 2px;
+      border: 1px solid var(--swatch-border);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-tertiary);
+    }
+
+    .swatch-image svg {
+      width: 8px;
+      height: 8px;
+      color: var(--text-muted);
+    }
+
+    /* ---- Select all checkbox ---- */
+
+    .select-all-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 0 calc(var(--space) * 1) 0;
+    }
+
+    .select-all-row input[type="checkbox"] {
+      width: 14px;
+      height: 14px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
+    .select-all-row label {
+      font-size: 11px;
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+
+    /* ---- Empty state ---- */
+
+    .empty-state {
+      padding: calc(var(--space) * 5) calc(var(--space) * 4);
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 11px;
+      line-height: 1.5;
+    }
+
+    .empty-state-icon {
+      margin-bottom: calc(var(--space) * 2);
+      color: var(--text-muted);
+      opacity: 0.5;
+    }
+
+    /* ---- Paste section ---- */
 
     .paste-section {
-      margin-top: auto;
+      margin-top: calc(var(--space) * 3);
+      display: flex;
+      flex-direction: column;
+      gap: calc(var(--space) * 2);
     }
 
+    .paste-hint {
+      font-size: 10px;
+      color: var(--text-muted);
+      font-style: italic;
+      text-align: center;
+      display: none;
+    }
+
+    .paste-hint.visible {
+      display: block;
+    }
+
+    /* ---- Message ---- */
+
     .message {
-      margin-top: 12px;
-      padding: 10px 12px;
+      padding: 8px 10px;
       border-radius: var(--radius);
       font-size: 11px;
       display: none;
+      line-height: 1.4;
     }
 
     .message.visible {
@@ -310,50 +474,35 @@
     }
 
     .message.success {
-      background: rgba(27, 196, 125, 0.1);
-      border: 1px solid rgba(27, 196, 125, 0.3);
+      background: var(--success-bg);
+      border: 1px solid var(--success-border);
       color: var(--success);
     }
 
     .message.error {
-      background: rgba(242, 72, 34, 0.1);
-      border: 1px solid rgba(242, 72, 34, 0.3);
+      background: var(--warning-bg);
+      border: 1px solid var(--warning-border);
       color: var(--warning);
     }
 
     .message.info {
-      background: rgba(79, 70, 229, 0.1);
-      border: 1px solid rgba(79, 70, 229, 0.3);
+      background: var(--info-bg);
+      border: 1px solid var(--info-border);
       color: var(--accent);
     }
 
-    .select-all-row {
-      display: flex;
-      justify-content: flex-end;
-    }
+    /* ---- Divider ---- */
 
-    .select-all-btn {
-      background: none;
+    .zone-divider {
       border: none;
-      color: var(--accent);
-      font-size: 11px;
-      cursor: pointer;
-      padding: 4px 8px;
-      border-radius: 4px;
-    }
-
-    .select-all-btn:hover {
-      background: var(--bg-secondary);
-    }
-
-    .select-all-btn:disabled {
-      color: var(--text-muted);
-      cursor: not-allowed;
+      border-top: 1px solid var(--border-light);
+      margin: calc(var(--space) * 3) 0;
     }
   </style>
 </head>
 <body>
-  <section class="top-section">
+  <!-- Header zone -->
+  <div class="zone header-zone">
     <div class="header">
       <div class="header-icon">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><rect width="24" height="24" fill="#eef2ff" rx="6"/><g clip-path="url(#a)"><path stroke="#4f46e5" stroke-linecap="round" stroke-linejoin="round" d="M14.25 7.5h1.125A1.125 1.125 0 0 1 16.5 8.625V16.5a1.125 1.125 0 0 1-1.125 1.125h-6.75A1.125 1.125 0 0 1 7.5 16.5V8.625A1.125 1.125 0 0 1 8.625 7.5H9.75M12 11.438h2.25M12 14.25h2.25m-4.5-2.812h.006M9.75 14.25h.006m.556-7.875h3.376c.31 0 .562.252.562.563v1.125c0 .31-.252.562-.562.562h-3.376a.56.56 0 0 1-.562-.562V6.937c0-.31.252-.562.563-.562"/></g><defs><clipPath id="a"><path fill="#fff" d="M5.25 5.25h13.5v13.5H5.25z"/></clipPath></defs></svg>
@@ -361,39 +510,63 @@
       <div class="header-content">
         <div class="header-title">
           <h1>CopyOne</h1>
-          <p class="version" id="versionLabel"></p>
+          <span class="version" id="versionLabel"></span>
         </div>
         <p>Copy and paste specific properties</p>
       </div>
     </div>
-  
-    <div class="copy-section-container">
-      <div class="selection-status empty" id="selectionStatus">
-        <div class="label">Current Selection</div>
-        <div class="value" id="selectionValue">No selection</div>
-      </div>
+  </div>
 
-      <button class="btn btn-primary" id="copyBtn" disabled>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-        </svg>
-        Copy Properties
-      </button>
-      <div class="copied-info" id="copiedInfo">
-        Copied! <span class="source-name" id="sourceName"></span>
-      </div>
+  <!-- Clipboard zone -->
+  <div class="zone clipboard-zone">
+    <div class="zone-label">Clipboard</div>
+    <div class="clipboard-source" id="clipboardSource">
+      <span class="clipboard-source-empty" id="clipboardEmpty">Nothing copied yet</span>
+      <span class="clipboard-source-icon" id="clipboardIcon" style="display:none">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
+      </span>
+      <span class="clipboard-source-name" id="clipboardName" style="display:none"></span>
+      <span class="clipboard-source-badge" id="clipboardBadge" style="display:none"></span>
     </div>
-  </section>
 
-  <section class="bottom-section">
-    <div class="properties-section">
-      <div class="properties-section-header">
-        <div class="section-title">Properties to Paste</div>
-        <div class="select-all-row">
-          <button class="select-all-btn" id="selectAllBtn" disabled>Select All</button>
-        </div>
+    <hr class="zone-divider">
+
+    <div class="zone-label">Target</div>
+    <div class="target-info" id="targetInfo">
+      <span class="target-info-empty" id="targetEmpty">No selection</span>
+      <span class="target-info-name" id="targetName" style="display:none"></span>
+      <span class="target-info-badge" id="targetBadge" style="display:none"></span>
+    </div>
+
+    <button class="btn btn-primary" id="copyBtn" disabled>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+      </svg>
+      Copy properties
+      <span class="shortcut-hint">&#8984;&#8997;C</span>
+    </button>
+  </div>
+
+  <!-- Paste zone -->
+  <div class="zone paste-zone">
+    <div class="zone-label">Properties to paste</div>
+
+    <!-- Empty state: shown when nothing is copied -->
+    <div class="empty-state" id="emptyState">
+      <div class="empty-state-icon">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
       </div>
+      Select an element and click &ldquo;Copy properties&rdquo; to get started.
+    </div>
+
+    <!-- Paste contents: shown after copy -->
+    <div id="pasteContents" style="display:none">
+      <div class="select-all-row">
+        <input type="checkbox" id="selectAllCb" disabled>
+        <label for="selectAllCb">Select all</label>
+      </div>
+
       <div class="properties-list" id="propertiesList">
         <div class="property-item disabled" data-property="fills">
           <input type="checkbox" id="prop-fills" disabled>
@@ -403,6 +576,10 @@
             </span>
             <span class="name">Fills</span>
           </label>
+          <div class="preview" id="preview-fills">
+            <span class="preview-swatches"></span>
+            <span class="preview-text"></span>
+          </div>
         </div>
         <div class="property-item disabled" data-property="strokes">
           <input type="checkbox" id="prop-strokes" disabled>
@@ -412,6 +589,10 @@
             </span>
             <span class="name">Strokes</span>
           </label>
+          <div class="preview" id="preview-strokes">
+            <span class="preview-swatches"></span>
+            <span class="preview-text"></span>
+          </div>
         </div>
         <div class="property-item disabled" data-property="effects">
           <input type="checkbox" id="prop-effects" disabled>
@@ -421,6 +602,9 @@
             </span>
             <span class="name">Effects</span>
           </label>
+          <div class="preview" id="preview-effects">
+            <span class="preview-text"></span>
+          </div>
         </div>
         <div class="property-item disabled" data-property="cornerRadius">
           <input type="checkbox" id="prop-cornerRadius" disabled>
@@ -428,8 +612,11 @@
             <span class="icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9V5a2 2 0 012-2h4M3 15v4a2 2 0 002 2h4m8-18h4a2 2 0 012 2v4m0 6v4a2 2 0 01-2 2h-4"/></svg>
             </span>
-            <span class="name">Corner Radius</span>
+            <span class="name">Corner radius</span>
           </label>
+          <div class="preview" id="preview-cornerRadius">
+            <span class="preview-text"></span>
+          </div>
         </div>
         <div class="property-item disabled" data-property="opacityBlend">
           <input type="checkbox" id="prop-opacityBlend" disabled>
@@ -437,8 +624,11 @@
             <span class="icon">
               <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10" fill-opacity="0.5"/></svg>
             </span>
-            <span class="name">Opacity & Blend</span>
+            <span class="name">Opacity &amp; blend</span>
           </label>
+          <div class="preview" id="preview-opacityBlend">
+            <span class="preview-text"></span>
+          </div>
         </div>
         <div class="property-item disabled" data-property="textStyles">
           <input type="checkbox" id="prop-textStyles" disabled>
@@ -446,56 +636,70 @@
             <span class="icon">
               <svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 4v3h5.5v12h3V7H19V4z"/></svg>
             </span>
-            <span class="name">Text Styles</span>
+            <span class="name">Text styles</span>
           </label>
+          <div class="preview" id="preview-textStyles">
+            <span class="preview-text"></span>
+          </div>
         </div>
       </div>
+
+      <div class="paste-section">
+        <button class="btn btn-secondary" id="pasteBtn" disabled>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
+            <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
+          </svg>
+          Paste selected
+          <span class="shortcut-hint">&#8984;&#8997;V</span>
+        </button>
+        <div class="paste-hint" id="pasteHint">Select target element(s) to paste</div>
+        <div class="message" id="message"></div>
+      </div>
     </div>
-  
-    <div class="paste-section">
-      <button class="btn btn-secondary" id="pasteBtn" disabled>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path>
-          <rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect>
-        </svg>
-        Paste Selected
-      </button>
-      <div class="message" id="message"></div>
-    </div>
-  </section>
+  </div>
 
   <script>
-    // State
-    let hasSelection = false;
-    let hasCopiedProperties = false;
-    let availableProperties = [];
+    var hasSelection = false;
+    var hasCopiedProperties = false;
+    var availableProperties = [];
+    var sourceName = null;
+    var sourceType = null;
 
     // DOM Elements
-    const selectionStatus = document.getElementById('selectionStatus');
-    const selectionValue = document.getElementById('selectionValue');
-    const copyBtn = document.getElementById('copyBtn');
-    const copiedInfo = document.getElementById('copiedInfo');
-    const sourceName = document.getElementById('sourceName');
-    const versionLabel = document.getElementById('versionLabel');
-    const propertiesList = document.getElementById('propertiesList');
-    const selectAllBtn = document.getElementById('selectAllBtn');
-    const pasteBtn = document.getElementById('pasteBtn');
-    const message = document.getElementById('message');
-    let resizeRafId = null;
+    var versionLabel = document.getElementById('versionLabel');
+    var copyBtn = document.getElementById('copyBtn');
+    var pasteBtn = document.getElementById('pasteBtn');
+    var message = document.getElementById('message');
+    var emptyState = document.getElementById('emptyState');
+    var pasteContents = document.getElementById('pasteContents');
+    var selectAllCb = document.getElementById('selectAllCb');
+    var pasteHint = document.getElementById('pasteHint');
+    var propertiesList = document.getElementById('propertiesList');
+
+    // Clipboard / target elements
+    var clipboardEmpty = document.getElementById('clipboardEmpty');
+    var clipboardIcon = document.getElementById('clipboardIcon');
+    var clipboardName = document.getElementById('clipboardName');
+    var clipboardBadge = document.getElementById('clipboardBadge');
+    var targetEmpty = document.getElementById('targetEmpty');
+    var targetName = document.getElementById('targetName');
+    var targetBadge = document.getElementById('targetBadge');
+
+    var resizeRafId = null;
 
     function requestResize() {
       if (resizeRafId !== null) {
         cancelAnimationFrame(resizeRafId);
       }
-      resizeRafId = requestAnimationFrame(() => {
+      resizeRafId = requestAnimationFrame(function () {
         resizeRafId = null;
-        const height = document.documentElement.scrollHeight;
-        parent.postMessage({ pluginMessage: { type: 'resize-ui', height } }, '*');
+        var height = document.documentElement.scrollHeight;
+        parent.postMessage({ pluginMessage: { type: 'resize-ui', height: height } }, '*');
       });
     }
 
-    // Property checkboxes
-    const propertyCheckboxes = {
+    var propertyCheckboxes = {
       fills: document.getElementById('prop-fills'),
       strokes: document.getElementById('prop-strokes'),
       effects: document.getElementById('prop-effects'),
@@ -504,51 +708,211 @@
       textStyles: document.getElementById('prop-textStyles'),
     };
 
-    // Update UI based on selection
-    function updateSelectionUI(data) {
-      hasSelection = data.hasSelection;
-      
-      if (data.hasSelection) {
-        selectionStatus.classList.remove('empty');
-        selectionValue.textContent = '';
-        const nameSpan = document.createElement('span');
-        nameSpan.textContent = data.nodeName;
-        selectionValue.appendChild(nameSpan);
-        if (data.nodeType !== 'MULTIPLE') {
-          const badge = document.createElement('span');
-          badge.className = 'type-badge';
-          badge.textContent = data.nodeType;
-          selectionValue.appendChild(badge);
+    // Preview containers
+    var previewContainers = {
+      fills: document.getElementById('preview-fills'),
+      strokes: document.getElementById('preview-strokes'),
+      effects: document.getElementById('preview-effects'),
+      cornerRadius: document.getElementById('preview-cornerRadius'),
+      opacityBlend: document.getElementById('preview-opacityBlend'),
+      textStyles: document.getElementById('preview-textStyles'),
+    };
+
+    function setClipboardSource(name, type) {
+      sourceName = name;
+      sourceType = type;
+      if (name) {
+        clipboardEmpty.style.display = 'none';
+        clipboardIcon.style.display = '';
+        clipboardName.style.display = '';
+        clipboardName.textContent = name;
+        clipboardName.title = name;
+        clipboardBadge.style.display = '';
+        clipboardBadge.textContent = type;
+      } else {
+        clipboardEmpty.style.display = '';
+        clipboardIcon.style.display = 'none';
+        clipboardName.style.display = 'none';
+        clipboardName.title = '';
+        clipboardBadge.style.display = 'none';
+      }
+    }
+
+    function setTargetInfo(name, type) {
+      if (name) {
+        targetEmpty.style.display = 'none';
+        targetName.style.display = '';
+        targetName.textContent = name;
+        targetName.title = name;
+        if (type && type !== 'MULTIPLE') {
+          targetBadge.style.display = '';
+          targetBadge.textContent = type;
+        } else {
+          targetBadge.style.display = 'none';
         }
       } else {
-        selectionStatus.classList.add('empty');
-        selectionValue.textContent = 'No selection';
+        targetEmpty.style.display = '';
+        targetName.style.display = 'none';
+        targetName.title = '';
+        targetBadge.style.display = 'none';
       }
+    }
 
+    function updateSelectionUI(data) {
+      hasSelection = data.hasSelection;
+      setTargetInfo(data.hasSelection ? data.nodeName : null, data.nodeType || null);
       updateButtonStates();
       requestResize();
     }
 
-    // Update available properties after copy
-    function updatePropertiesUI(data) {
-      hasCopiedProperties = true;
-      availableProperties = data.availableProperties;
+    function clearPreviews() {
+      Object.keys(previewContainers).forEach(function (prop) {
+        var container = previewContainers[prop];
+        var swatchesEl = container.querySelector('.preview-swatches');
+        var textEl = container.querySelector('.preview-text');
+        if (swatchesEl) swatchesEl.innerHTML = '';
+        if (textEl) {
+          textEl.textContent = '';
+          textEl.className = 'preview-text';
+          textEl.removeAttribute('title');
+        }
+      });
+    }
 
-      // Show copied info
-      copiedInfo.classList.add('visible');
-      if (sourceName && data.properties?.sourceName) {
-        sourceName.textContent = data.properties.sourceName;
+    function renderSwatch(color) {
+      var span = document.createElement('span');
+      span.className = 'swatch';
+      span.style.backgroundColor = color;
+      return span;
+    }
+
+    function renderFillsPreview(previews) {
+      var container = previewContainers.fills;
+      var swatchesEl = container.querySelector('.preview-swatches');
+      var textEl = container.querySelector('.preview-text');
+      swatchesEl.innerHTML = '';
+      textEl.textContent = '';
+      textEl.removeAttribute('title');
+
+      if (!previews || !previews.fills) return;
+
+      var fp = previews.fills;
+      var shown = 0;
+      for (var i = 0; i < fp.swatches.length && shown < 3; i++) {
+        if (fp.swatches[i] === 'image') {
+          var imgSpan = document.createElement('span');
+          imgSpan.className = 'swatch-image';
+          imgSpan.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>';
+          swatchesEl.appendChild(imgSpan);
+        } else {
+          swatchesEl.appendChild(renderSwatch(fp.swatches[i]));
+        }
+        shown++;
+      }
+      if (fp.swatches.length > 3) {
+        swatchesEl.appendChild(renderSwatch('#999'));
       }
 
+      textEl.textContent = fp.label;
+      textEl.title = fp.label;
+    }
+
+    function renderStrokesPreview(previews) {
+      var container = previewContainers.strokes;
+      var swatchesEl = container.querySelector('.preview-swatches');
+      var textEl = container.querySelector('.preview-text');
+      swatchesEl.innerHTML = '';
+      textEl.textContent = '';
+      textEl.removeAttribute('title');
+
+      if (!previews || !previews.strokes) return;
+
+      var sp = previews.strokes;
+      if (sp.swatch) {
+        swatchesEl.appendChild(renderSwatch(sp.swatch));
+      }
+
+      var parts = [];
+      if (sp.weight) parts.push(sp.weight);
+      if (sp.dashed) parts.push('dashed');
+      textEl.textContent = parts.join(', ');
+      textEl.title = parts.join(', ');
+    }
+
+    function renderTextPreview(container, text, isPartial) {
+      var textEl = container.querySelector('.preview-text');
+      textEl.textContent = text || '';
+      textEl.className = isPartial ? 'preview-text partial' : 'preview-text';
+      if (text) textEl.title = (isPartial ? '(partial) ' : '') + text;
+    }
+
+    function updatePreviews(previews) {
+      if (!previews) {
+        clearPreviews();
+        return;
+      }
+
+      renderFillsPreview(previews);
+      renderStrokesPreview(previews);
+      renderTextPreview(previewContainers.effects, previews.effects || '', false);
+      renderTextPreview(previewContainers.cornerRadius, previews.cornerRadius || '', false);
+      renderTextPreview(previewContainers.opacityBlend, previews.opacityBlend || '', false);
+      renderTextPreview(previewContainers.textStyles, previews.textStyles || '', previews.textStylesPartial || false);
+    }
+
+    function updateSelectAllState() {
+      var enabledProps = availableProperties.filter(function (prop) {
+        return !propertyCheckboxes[prop].disabled;
+      });
+      if (enabledProps.length === 0) {
+        selectAllCb.checked = false;
+        selectAllCb.indeterminate = false;
+        selectAllCb.disabled = true;
+        return;
+      }
+      selectAllCb.disabled = false;
+      var checkedCount = enabledProps.filter(function (prop) {
+        return propertyCheckboxes[prop].checked;
+      }).length;
+      if (checkedCount === 0) {
+        selectAllCb.checked = false;
+        selectAllCb.indeterminate = false;
+      } else if (checkedCount === enabledProps.length) {
+        selectAllCb.checked = true;
+        selectAllCb.indeterminate = false;
+      } else {
+        selectAllCb.checked = false;
+        selectAllCb.indeterminate = true;
+      }
+    }
+
+    function showPasteContents() {
+      hasCopiedProperties = true;
+      emptyState.style.display = 'none';
+      pasteContents.style.display = '';
+    }
+
+    function updatePropertiesUI(data) {
+      showPasteContents();
+      availableProperties = data.availableProperties;
+
+      // Update clipboard source
+      if (data.properties && data.properties.sourceName) {
+        setClipboardSource(data.properties.sourceName, data.properties.sourceType);
+      }
+
+      // Update previews
+      updatePreviews(data.previews || null);
+
       // Enable/disable property items based on availability
-      Object.keys(propertyCheckboxes).forEach(prop => {
-        const item = document.querySelector(`[data-property="${prop}"]`);
-        const checkbox = propertyCheckboxes[prop];
-        
-        if (availableProperties.includes(prop)) {
+      Object.keys(propertyCheckboxes).forEach(function (prop) {
+        var item = document.querySelector('[data-property="' + prop + '"]');
+        var checkbox = propertyCheckboxes[prop];
+
+        if (availableProperties.indexOf(prop) !== -1) {
           item.classList.remove('disabled');
           checkbox.disabled = false;
-          checkbox.checked = true; // Auto-select available properties
+          checkbox.checked = true;
         } else {
           item.classList.add('disabled');
           checkbox.disabled = true;
@@ -556,40 +920,45 @@
         }
       });
 
-      selectAllBtn.disabled = availableProperties.length === 0;
+      updateSelectAllState();
       updateButtonStates();
       requestResize();
     }
 
-    // Update button states
     function updateButtonStates() {
       copyBtn.disabled = !hasSelection;
-      
-      const hasCheckedProperties = Object.values(propertyCheckboxes).some(cb => cb.checked && !cb.disabled);
-      pasteBtn.disabled = !hasSelection || !hasCopiedProperties || !hasCheckedProperties;
+
+      var hasChecked = Object.values(propertyCheckboxes).some(function (cb) {
+        return cb.checked && !cb.disabled;
+      });
+      pasteBtn.disabled = !hasSelection || !hasCopiedProperties || !hasChecked;
+
+      // Show/hide paste hint
+      if (hasCopiedProperties && !hasSelection) {
+        pasteHint.classList.add('visible');
+      } else {
+        pasteHint.classList.remove('visible');
+      }
     }
 
-    // Get selected properties
     function getSelectedProperties() {
       return Object.entries(propertyCheckboxes)
-        .filter(([_, checkbox]) => checkbox.checked && !checkbox.disabled)
-        .map(([prop, _]) => prop);
+        .filter(function (entry) { return entry[1].checked && !entry[1].disabled; })
+        .map(function (entry) { return entry[0]; });
     }
 
-    let messageTimer = null;
+    var messageTimer = null;
 
-    // Show message
     function showMessage(text, type) {
       if (messageTimer) {
         clearTimeout(messageTimer);
         messageTimer = null;
       }
       message.textContent = text;
-      message.className = `message visible ${type}`;
+      message.className = 'message visible ' + type;
 
-      // Auto-hide success and info messages; errors stay until next action
       if (type !== 'error') {
-        messageTimer = setTimeout(() => {
+        messageTimer = setTimeout(function () {
           message.classList.remove('visible');
           messageTimer = null;
           requestResize();
@@ -598,7 +967,6 @@
       requestResize();
     }
 
-    // Dismiss persistent messages on next user action
     function dismissMessage() {
       if (messageTimer) {
         clearTimeout(messageTimer);
@@ -609,45 +977,45 @@
     }
 
     // Event Listeners
-    copyBtn.addEventListener('click', () => {
+
+    copyBtn.addEventListener('click', function () {
       dismissMessage();
       parent.postMessage({ pluginMessage: { type: 'copy' } }, '*');
     });
 
-    pasteBtn.addEventListener('click', () => {
+    pasteBtn.addEventListener('click', function () {
       dismissMessage();
-      const properties = getSelectedProperties();
-      parent.postMessage({ pluginMessage: { type: 'paste', properties } }, '*');
+      var properties = getSelectedProperties();
+      parent.postMessage({ pluginMessage: { type: 'paste', properties: properties } }, '*');
     });
 
-    selectAllBtn.addEventListener('click', () => {
-      const allChecked = availableProperties.every(prop => propertyCheckboxes[prop].checked);
-      
-      availableProperties.forEach(prop => {
-        propertyCheckboxes[prop].checked = !allChecked;
+    selectAllCb.addEventListener('change', function () {
+      var shouldCheck = selectAllCb.checked;
+      availableProperties.forEach(function (prop) {
+        if (!propertyCheckboxes[prop].disabled) {
+          propertyCheckboxes[prop].checked = shouldCheck;
+        }
       });
-      
-      selectAllBtn.textContent = allChecked ? 'Select All' : 'Deselect All';
+      updateSelectAllState();
       updateButtonStates();
     });
 
-    // Update select all button text on individual checkbox change
-    Object.values(propertyCheckboxes).forEach(checkbox => {
-      checkbox.addEventListener('change', () => {
-        const allChecked = availableProperties.every(prop => propertyCheckboxes[prop].checked);
-        selectAllBtn.textContent = allChecked ? 'Deselect All' : 'Select All';
+    // Keep tri-state in sync on individual checkbox change
+    Object.values(propertyCheckboxes).forEach(function (checkbox) {
+      checkbox.addEventListener('change', function () {
+        updateSelectAllState();
         updateButtonStates();
       });
     });
 
     // Handle messages from plugin
-    window.onmessage = (event) => {
-      const msg = event.data.pluginMessage;
+    window.onmessage = function (event) {
+      var msg = event.data.pluginMessage;
       if (!msg) return;
 
       switch (msg.type) {
         case 'version':
-          versionLabel.textContent = `v${msg.version}`;
+          versionLabel.textContent = 'v' + msg.version;
           requestResize();
           break;
         case 'selection-changed':
@@ -671,6 +1039,31 @@
     // Request initial selection state
     parent.postMessage({ pluginMessage: { type: 'get-selection' } }, '*');
     requestResize();
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', function (e) {
+      var isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
+      var modKey = isMac ? e.metaKey : e.ctrlKey;
+
+      if (!modKey || !e.altKey || e.shiftKey) return;
+
+      if (e.key === 'c' || e.key === 'C') {
+        if (!copyBtn.disabled) {
+          e.preventDefault();
+          e.stopPropagation();
+          dismissMessage();
+          parent.postMessage({ pluginMessage: { type: 'copy' } }, '*');
+        }
+      } else if (e.key === 'v' || e.key === 'V') {
+        if (!pasteBtn.disabled) {
+          e.preventDefault();
+          e.stopPropagation();
+          dismissMessage();
+          var properties = getSelectedProperties();
+          parent.postMessage({ pluginMessage: { type: 'paste', properties: properties } }, '*');
+        }
+      }
+    });
   </script>
 </body>
 </html>
