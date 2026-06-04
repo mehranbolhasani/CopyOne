@@ -87,7 +87,7 @@
     /* ---- Zones ---- */
 
     .zone {
-      padding: calc(var(--space) * 3) calc(var(--space) * 4);
+      padding: calc(var(--space) * 2) calc(var(--space) * 2);
     }
 
     .zone + .zone {
@@ -98,20 +98,20 @@
       font-size: 10px;
       font-weight: 500;
       color: var(--text-muted);
-      margin-bottom: calc(var(--space) * 2);
     }
 
     /* ---- Header ---- */
 
     .header-zone {
-      padding: calc(var(--space) * 4) calc(var(--space) * 4);
+      padding: calc(var(--space) * 2) calc(var(--space) * 2);
+      background: lch(from #4F46E5 l c h / 0.075);
     }
 
     .header {
       display: flex;
       align-items: center;
       justify-content: flex-start;
-      gap: 12px;
+      gap: 6px;
     }
 
     .header-content {
@@ -155,11 +155,26 @@
 
     /* ---- Clipboard zone ---- */
 
+    .zone.clipboard-zone {
+        display: flex;
+        flex-direction: column;
+        gap: calc(var(--space) * 2);
+
+        & > * {
+            margin: 0;
+        }
+
+        .clipboard-zone__target, .clipboard-zone__clipboard {
+            background: var(--bg-surface);
+            border-radius: calc(var(--radius) * 2);
+            padding: calc(var(--space) * 2);
+        }
+    }
+
     .clipboard-source {
-      padding: 6px 10px;
+      padding: 10px 0;
       background: var(--bg-surface);
       border-radius: var(--radius);
-      margin-bottom: calc(var(--space) * 3);
       font-size: 11px;
       display: flex;
       align-items: center;
@@ -171,6 +186,8 @@
     .clipboard-source-empty {
       color: var(--text-muted);
       font-style: italic;
+      text-align: center;
+      display: block;
     }
 
     .clipboard-source-name {
@@ -201,8 +218,7 @@
     /* ---- Target info ---- */
 
     .target-info {
-      padding: 6px 0;
-      margin-bottom: calc(var(--space) * 1);
+      padding: 8px 0;
       display: flex;
       align-items: center;
       gap: 6px;
@@ -236,18 +252,18 @@
     /* ---- Buttons ---- */
 
     .btn {
-      width: 100%;
-      padding: 8px 12px;
-      border: none;
-      border-radius: var(--radius);
-      font-size: 12px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: all 0.15s ease;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
+        width: 100%;
+        padding: 12px 12px;
+        border: none;
+        border-radius: calc(var(--radius) * 1.4);
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
     }
 
     .btn:disabled {
@@ -256,8 +272,11 @@
     }
 
     .btn-primary {
-      background: var(--btn-primary-bg);
-      color: #ffffff;
+        background: var(--btn-primary-bg);
+        color: #ffffff;
+        box-shadow: 0 8px 16px -3px lch(from #4F46E5 l c h / 0.5);
+        position: relative;
+        z-index: 2;
     }
 
     .btn-primary:hover:not(:disabled) {
@@ -282,21 +301,34 @@
 
     /* ---- Properties list (paste zone) ---- */
 
+    .zone.paste-zone {
+        display: flex;
+        flex-direction: column;
+        gap: calc(var(--space) * 2);
+    }
+
+    .paste-zone-content {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+    }
+
     .properties-list {
       display: flex;
       flex-direction: column;
-      gap: 2px;
-      margin-top: calc(var(--space) * 1);
+      gap: 0;
     }
 
     .property-item {
       display: flex;
       align-items: center;
-      gap: 8px;
-      padding: 6px 8px;
-      background: var(--bg-secondary);
-      border-radius: var(--radius);
+      gap: 6px;
+      padding: 8px;
       transition: background 0.15s ease;
+
+      &:not(:last-child) {
+        border-bottom: 1px solid var(--bg-tertiary);
+      }
     }
 
     .property-item:hover {
@@ -403,10 +435,10 @@
     /* ---- Select all checkbox ---- */
 
     .select-all-row {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 2px 0 calc(var(--space) * 1) 0;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: calc(var(--space) * 2);
     }
 
     .select-all-row input[type="checkbox"] {
@@ -519,24 +551,14 @@
 
   <!-- Clipboard zone -->
   <div class="zone clipboard-zone">
-    <div class="zone-label">Clipboard</div>
-    <div class="clipboard-source" id="clipboardSource">
-      <span class="clipboard-source-empty" id="clipboardEmpty">Nothing copied yet</span>
-      <span class="clipboard-source-icon" id="clipboardIcon" style="display:none">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
-      </span>
-      <span class="clipboard-source-name" id="clipboardName" style="display:none"></span>
-      <span class="clipboard-source-badge" id="clipboardBadge" style="display:none"></span>
-    </div>
-
-    <hr class="zone-divider">
-
-    <div class="zone-label">Target</div>
-    <div class="target-info" id="targetInfo">
-      <span class="target-info-empty" id="targetEmpty">No selection</span>
-      <span class="target-info-name" id="targetName" style="display:none"></span>
-      <span class="target-info-badge" id="targetBadge" style="display:none"></span>
-    </div>
+      <div class="clipboard-zone__target">
+        <div class="zone-label">Target</div>
+        <div class="target-info" id="targetInfo">
+        <span class="target-info-empty" id="targetEmpty">No selection</span>
+        <span class="target-info-name" id="targetName" style="display:none"></span>
+        <span class="target-info-badge" id="targetBadge" style="display:none"></span>
+        </div>
+      </div>
 
     <button class="btn btn-primary" id="copyBtn" disabled>
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -546,6 +568,18 @@
       Copy properties
       <span class="shortcut-hint">&#8984;&#8997;C</span>
     </button>
+
+    <div class="clipboard-zone__clipboard">
+        <div class="zone-label">Clipboard</div>
+        <div class="clipboard-source" id="clipboardSource">
+        <span class="clipboard-source-empty" id="clipboardEmpty">Nothing copied yet</span>
+        <span class="clipboard-source-icon" id="clipboardIcon" style="display:none">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
+        </span>
+        <span class="clipboard-source-name" id="clipboardName" style="display:none"></span>
+        <span class="clipboard-source-badge" id="clipboardBadge" style="display:none"></span>
+        </div>
+    </div>
   </div>
 
   <!-- Paste zone -->
@@ -562,87 +596,89 @@
 
     <!-- Paste contents: shown after copy -->
     <div id="pasteContents" style="display:none">
-      <div class="select-all-row">
-        <input type="checkbox" id="selectAllCb" disabled>
-        <label for="selectAllCb">Select all</label>
-      </div>
+        <div class="paste-zone-content">
+            <div class="select-all-row">
+                <input type="checkbox" id="selectAllCb" disabled>
+                <label for="selectAllCb">Select all</label>
+            </div>
 
-      <div class="properties-list" id="propertiesList">
-        <div class="property-item disabled" data-property="fills">
-          <input type="checkbox" id="prop-fills" disabled>
-          <label for="prop-fills">
-            <span class="icon">
-              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/></svg>
-            </span>
-            <span class="name">Fills</span>
-          </label>
-          <div class="preview" id="preview-fills">
-            <span class="preview-swatches"></span>
-            <span class="preview-text"></span>
-          </div>
+            <div class="properties-list" id="propertiesList">
+                <div class="property-item disabled" data-property="fills">
+                <input type="checkbox" id="prop-fills" disabled>
+                <label for="prop-fills">
+                    <span class="icon">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/></svg>
+                    </span>
+                    <span class="name">Fills</span>
+                </label>
+                <div class="preview" id="preview-fills">
+                    <span class="preview-swatches"></span>
+                    <span class="preview-text"></span>
+                </div>
+                </div>
+                <div class="property-item disabled" data-property="strokes">
+                <input type="checkbox" id="prop-strokes" disabled>
+                <label for="prop-strokes">
+                    <span class="icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+                    </span>
+                    <span class="name">Strokes</span>
+                </label>
+                <div class="preview" id="preview-strokes">
+                    <span class="preview-swatches"></span>
+                    <span class="preview-text"></span>
+                </div>
+                </div>
+                <div class="property-item disabled" data-property="effects">
+                <input type="checkbox" id="prop-effects" disabled>
+                <label for="prop-effects">
+                    <span class="icon">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3a9 9 0 109 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 01-4.4 2.26 5.403 5.403 0 01-3.14-9.8c-.44-.06-.9-.1-1.36-.1z"/></svg>
+                    </span>
+                    <span class="name">Effects</span>
+                </label>
+                <div class="preview" id="preview-effects">
+                    <span class="preview-text"></span>
+                </div>
+                </div>
+                <div class="property-item disabled" data-property="cornerRadius">
+                <input type="checkbox" id="prop-cornerRadius" disabled>
+                <label for="prop-cornerRadius">
+                    <span class="icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9V5a2 2 0 012-2h4M3 15v4a2 2 0 002 2h4m8-18h4a2 2 0 012 2v4m0 6v4a2 2 0 01-2 2h-4"/></svg>
+                    </span>
+                    <span class="name">Corner radius</span>
+                </label>
+                <div class="preview" id="preview-cornerRadius">
+                    <span class="preview-text"></span>
+                </div>
+                </div>
+                <div class="property-item disabled" data-property="opacityBlend">
+                <input type="checkbox" id="prop-opacityBlend" disabled>
+                <label for="prop-opacityBlend">
+                    <span class="icon">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10" fill-opacity="0.5"/></svg>
+                    </span>
+                    <span class="name">Opacity &amp; blend</span>
+                </label>
+                <div class="preview" id="preview-opacityBlend">
+                    <span class="preview-text"></span>
+                </div>
+                </div>
+                <div class="property-item disabled" data-property="textStyles">
+                <input type="checkbox" id="prop-textStyles" disabled>
+                <label for="prop-textStyles">
+                    <span class="icon">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 4v3h5.5v12h3V7H19V4z"/></svg>
+                    </span>
+                    <span class="name">Text styles</span>
+                </label>
+                <div class="preview" id="preview-textStyles">
+                    <span class="preview-text"></span>
+                </div>
+                </div>
+            </div>
         </div>
-        <div class="property-item disabled" data-property="strokes">
-          <input type="checkbox" id="prop-strokes" disabled>
-          <label for="prop-strokes">
-            <span class="icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
-            </span>
-            <span class="name">Strokes</span>
-          </label>
-          <div class="preview" id="preview-strokes">
-            <span class="preview-swatches"></span>
-            <span class="preview-text"></span>
-          </div>
-        </div>
-        <div class="property-item disabled" data-property="effects">
-          <input type="checkbox" id="prop-effects" disabled>
-          <label for="prop-effects">
-            <span class="icon">
-              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3a9 9 0 109 9c0-.46-.04-.92-.1-1.36a5.389 5.389 0 01-4.4 2.26 5.403 5.403 0 01-3.14-9.8c-.44-.06-.9-.1-1.36-.1z"/></svg>
-            </span>
-            <span class="name">Effects</span>
-          </label>
-          <div class="preview" id="preview-effects">
-            <span class="preview-text"></span>
-          </div>
-        </div>
-        <div class="property-item disabled" data-property="cornerRadius">
-          <input type="checkbox" id="prop-cornerRadius" disabled>
-          <label for="prop-cornerRadius">
-            <span class="icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9V5a2 2 0 012-2h4M3 15v4a2 2 0 002 2h4m8-18h4a2 2 0 012 2v4m0 6v4a2 2 0 01-2 2h-4"/></svg>
-            </span>
-            <span class="name">Corner radius</span>
-          </label>
-          <div class="preview" id="preview-cornerRadius">
-            <span class="preview-text"></span>
-          </div>
-        </div>
-        <div class="property-item disabled" data-property="opacityBlend">
-          <input type="checkbox" id="prop-opacityBlend" disabled>
-          <label for="prop-opacityBlend">
-            <span class="icon">
-              <svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="10" fill-opacity="0.5"/></svg>
-            </span>
-            <span class="name">Opacity &amp; blend</span>
-          </label>
-          <div class="preview" id="preview-opacityBlend">
-            <span class="preview-text"></span>
-          </div>
-        </div>
-        <div class="property-item disabled" data-property="textStyles">
-          <input type="checkbox" id="prop-textStyles" disabled>
-          <label for="prop-textStyles">
-            <span class="icon">
-              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 4v3h5.5v12h3V7H19V4z"/></svg>
-            </span>
-            <span class="name">Text styles</span>
-          </label>
-          <div class="preview" id="preview-textStyles">
-            <span class="preview-text"></span>
-          </div>
-        </div>
-      </div>
 
       <div class="paste-section">
         <button class="btn btn-secondary" id="pasteBtn" disabled>
