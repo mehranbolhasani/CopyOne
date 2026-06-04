@@ -81,7 +81,7 @@ type MessageToUI =
   | { type: "version"; version: string }
   | { type: "build-info"; devLabel: string; buildStamp: string }
   | { type: "selection-changed"; hasSelection: boolean; nodeName?: string; nodeType?: string }
-  | { type: "properties-copied"; properties: StoredProperties; availableProperties: string[]; previews: PropertyPreviews }
+  | { type: "properties-copied"; sourceName: string; sourceType: string; availableProperties: string[]; previews: PropertyPreviews }
   | { type: "paste-complete"; success: boolean; message: string }
   | { type: "info"; message: string }
   | { type: "error"; message: string };
@@ -698,14 +698,27 @@ async function handleCopy(): Promise<void> {
   }
 
   const node = selection[0];
-  const properties = extractAllProperties(node);
+
+  let properties: StoredProperties;
+  try {
+    properties = extractAllProperties(node);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    figma.ui.postMessage({
+      type: "error",
+      message: "Copy failed: " + msg,
+    } as MessageToUI);
+    return;
+  }
+
   setStored(properties);
   const availableProperties = getAvailableProperties(properties);
   const previews = computeAllPreviews(properties);
 
   figma.ui.postMessage({
     type: "properties-copied",
-    properties: properties,
+    sourceName: properties.sourceName,
+    sourceType: properties.sourceType,
     availableProperties,
     previews,
   } as MessageToUI);

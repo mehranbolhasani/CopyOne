@@ -897,8 +897,8 @@
       availableProperties = data.availableProperties;
 
       // Update clipboard source
-      if (data.properties && data.properties.sourceName) {
-        setClipboardSource(data.properties.sourceName, data.properties.sourceType);
+      if (data.sourceName) {
+        setClipboardSource(data.sourceName, data.sourceType);
       }
 
       // Update previews
