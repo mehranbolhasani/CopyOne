@@ -195,7 +195,6 @@ type MessageToPlugin =
 
 type MessageToUI =
   | { type: "version"; version: string }
-  | { type: "build-info"; devLabel: string; buildStamp: string }
   | { type: "selection-changed"; hasSelection: boolean; count: number; nodeName?: string; nodeType?: string }
   | { type: "property-labels"; labels: { [property: string]: string } }
   | {
@@ -230,8 +229,6 @@ function setStored(value: StoredProperties | null): void {
   _stored = value;
 }
 const PLUGIN_VERSION = "__PLUGIN_VERSION__";
-const PLUGIN_BUILD_STAMP = "__PLUGIN_BUILD_STAMP__";
-const PLUGIN_DEV_LABEL = "__PLUGIN_DEV_LABEL__";
 const UI_WIDTH = 300;
 const UI_MIN_HEIGHT = 420;
 const UI_MAX_HEIGHT = 1200;
@@ -2268,11 +2265,6 @@ figma.ui.postMessage({
 figma.ui.postMessage({
   type: "property-labels",
   labels: PROPERTY_LABELS,
-} as MessageToUI);
-figma.ui.postMessage({
-  type: "build-info",
-  devLabel: PLUGIN_DEV_LABEL,
-  buildStamp: PLUGIN_BUILD_STAMP,
 } as MessageToUI);
 
 // Listen for selection changes

@@ -1,7 +1,7 @@
 {
   "name": "CopyOne",
-  "version": "1.1.0",
-  "description": "Selectively copy and paste properties between Figma elements",
+  "version": "1.2.0",
+  "description": "Selectively copy and paste properties between Figma layers",
   "main": "code.js",
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/inject-version.mjs",

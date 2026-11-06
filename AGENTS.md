@@ -7,7 +7,7 @@ Figma plugin. `code.ts` runs in the Figma sandbox, `ui.html` is the plugin UI pa
 ## Commands
 
 ```bash
-npm run build      # tsc → inject version tokens into code.js
+npm run build      # tsc → inject __PLUGIN_VERSION__ into code.js
 npm run dev        # Watch code.ts / package.json / tsconfig.json / scripts, auto-run full build on change
 npm run watch      # tsc --watch only (no version injection)
 npm run lint       # ESLint
@@ -23,13 +23,13 @@ There are no test scripts.
 ## Build pipeline (must run in order)
 
 1. `tsc -p tsconfig.json` compiles `code.ts` → `code.js`
-2. `scripts/inject-version.mjs` replaces `__PLUGIN_VERSION__`, `__PLUGIN_BUILD_STAMP__`, and `__PLUGIN_DEV_LABEL__` tokens in the compiled `code.js` with values from `package.json` and current timestamp
+2. `scripts/inject-version.mjs` replaces the `__PLUGIN_VERSION__` token in the compiled `code.js` with `package.json`'s version
 
 `code.js` is gitignored. **Never edit `code.js` directly** — edit `code.ts` and run `npm run build`.
 
 ## Architecture
 
-Single source file (`code.ts`, ~800 lines) with one UI file (`ui.html`). No frameworks — vanilla TypeScript and HTML/CSS/JS.
+Single source file (`code.ts`, ~2,300 lines) with one UI file (`ui.html`, ~1,400 lines). No frameworks — vanilla TypeScript and HTML/CSS/JS.
 
 ## Communication
 
@@ -45,11 +45,34 @@ The plugin (sandbox) and UI communicate via postMessage:
 
 Sandbox code may store `figma.mixed` in local state (e.g. `_stored.cornerRadius`), but the UI message contract must only send JSON-safe data. The `properties-copied` message sends `sourceName: string` and `sourceType: string`, **not** the full `StoredProperties` object.
 
+## Clipboard storage
+
+Both keys live in `figma.clientStorage` and are versioned with `schema: 1`.
+
+| Key | Contents |
+|---|---|
+| `copyone.clipboard.v1` | `{ schema: 1, savedAt: ISO string, data: SerializedProperties }`. The `data` object contains every field Phase 1 captures: source name and type, paints and effects, style ids and names, variable ids and names, per-side stroke weights, corner smoothing, text styles, and mixed-value marker booleans such as `fillsMixed`. `figma.mixed` is never stored. |
+| `copyone.prefs.v1` | `{ schema: 1, checked: { [property: string]: boolean } }`. Holds explicit checkbox choices per property key. Default-valued rows still start unchecked regardless of prefs. |
+
+**Important:** any change to the serialized clipboard shape must bump the schema and update the validator in `code.ts`. A schema or field mismatch deletes the saved clipboard and starts empty so CopyOne never pastes partially restored data. Clearing the clipboard deletes `copyone.clipboard.v1` only; prefs are kept.
+
+`availableProperties`, `defaultValued`, and previews are never stored. They are recomputed on restore with the same functions used on copy.
+
+## Apply result model
+
+Every `apply*` function returns:
+
+- `status`: `"applied"`, `"skipped"`, or `"failed"`
+- `notes`: an array of `{ reason, detail? }`
+
+Reasons include `unsupported-layer`, `missing-font`, `style-unavailable`, `variable-unavailable`, `variable-not-bindable`, `image-unavailable`, and `error`. A group can report multiple notes. Paste messages are grouped by property + reason + detail and count affected layers.
+
 ## Figma-specific constraints
 
 - TypeScript target is `es6`, lib is `es6` only — no DOM/types available in sandbox code
 - Figma plugin typings from `@figma/plugin-typings`
 - `manifest.json`: `documentAccess: "dynamic-page"`, `networkAccess.allowedDomains: ["none"]`
+- `figma.showUI` passes `themeColors: true`; the UI themes with `html.figma-dark`, not an OS `prefers-color-scheme` query
 - Text styles require `await figma.loadFontAsync(font)` before applying
 - `dev-watch.mjs` only watches TS/build files; for HTML/CSS changes, manually close and relaunch the plugin in Figma
 
