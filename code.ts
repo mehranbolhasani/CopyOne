@@ -11,6 +11,13 @@ interface CornerRadii {
   bottomRight: number;
 }
 
+interface StrokeSideWeights {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
 interface TextStyles {
   fontSize?: number;
   fontName?: FontName;
@@ -21,6 +28,20 @@ interface TextStyles {
   hasMixedValues?: boolean;
 }
 
+type StoredNodeField =
+  | "topLeftRadius"
+  | "topRightRadius"
+  | "bottomLeftRadius"
+  | "bottomRightRadius"
+  | "strokeWeight"
+  | "strokeTopWeight"
+  | "strokeRightWeight"
+  | "strokeBottomWeight"
+  | "strokeLeftWeight"
+  | "opacity";
+
+type StoredBoundVariables = Partial<Record<StoredNodeField, string>>;
+
 interface StoredProperties {
   // Source element info
   sourceName: string;
@@ -28,21 +49,29 @@ interface StoredProperties {
 
   // Fill properties
   fills?: readonly Paint[] | typeof figma.mixed;
+  fillStyleId?: string;
+  fillStyleName?: string;
 
   // Stroke properties
   strokes?: readonly Paint[];
   strokeWeight?: number | typeof figma.mixed;
+  strokeSideWeights?: StrokeSideWeights;
   strokeAlign?: "CENTER" | "INSIDE" | "OUTSIDE";
   strokeCap?: StrokeCap | typeof figma.mixed;
   strokeJoin?: StrokeJoin | typeof figma.mixed;
   dashPattern?: readonly number[];
+  strokeStyleId?: string;
+  strokeStyleName?: string;
 
   // Effects
   effects?: readonly Effect[];
+  effectStyleId?: string;
+  effectStyleName?: string;
 
   // Corner radius
   cornerRadius?: number | typeof figma.mixed;
   cornerRadii?: CornerRadii;
+  cornerSmoothing?: number;
 
   // Opacity and blend
   opacity?: number;
@@ -50,6 +79,12 @@ interface StoredProperties {
 
   // Text styles
   textStyles?: TextStyles;
+  textStyleId?: string;
+  textStyleName?: string;
+
+  // Variable bindings on the node itself
+  boundVariables?: StoredBoundVariables;
+  boundVariableNames?: { [field: string]: string };
 }
 
 interface PropertyPreviews {
@@ -69,6 +104,29 @@ interface PropertyPreviews {
   textStyles?: string;
   textStylesPartial?: boolean;
 }
+
+type ApplyStatus = "applied" | "skipped" | "failed";
+
+type ApplyReason =
+  | "unsupported-layer"
+  | "missing-font"
+  | "style-unavailable"
+  | "variable-unavailable"
+  | "variable-not-bindable"
+  | "image-unavailable"
+  | "error";
+
+interface ApplyNote {
+  reason: ApplyReason;
+  detail?: string;
+}
+
+interface ApplyResult {
+  status: ApplyStatus;
+  notes: ApplyNote[];
+}
+
+type PropertyResults = { [property: string]: ApplyResult };
 
 // Message types for communication between UI and plugin
 type MessageToPlugin =
@@ -106,25 +164,90 @@ const UI_WIDTH = 300;
 const UI_MIN_HEIGHT = 420;
 const UI_MAX_HEIGHT = 1200;
 
+const BOUND_VARIABLE_FIELDS: StoredNodeField[] = [
+  "topLeftRadius",
+  "topRightRadius",
+  "bottomLeftRadius",
+  "bottomRightRadius",
+  "strokeWeight",
+  "strokeTopWeight",
+  "strokeRightWeight",
+  "strokeBottomWeight",
+  "strokeLeftWeight",
+  "opacity",
+];
+
+interface BoundVariableSource {
+  readonly boundVariables?: { [field: string]: VariableAlias | undefined };
+}
+
 // ============================================================================
 // Property Extraction Functions
 // ============================================================================
 
-function extractFills(node: SceneNode): Pick<StoredProperties, "fills"> {
+function extractFills(node: SceneNode): Pick<StoredProperties, "fills" | "fillStyleId"> {
+  const result: Pick<StoredProperties, "fills" | "fillStyleId"> = {};
+
   if ("fills" in node) {
-    return { fills: node.fills };
+    result.fills = node.fills;
   }
-  return {};
+  if ("fillStyleId" in node && typeof node.fillStyleId === "string" && node.fillStyleId !== "") {
+    result.fillStyleId = node.fillStyleId;
+  }
+
+  return result;
 }
 
-function extractStrokes(node: SceneNode): Pick<StoredProperties, "strokes" | "strokeWeight" | "strokeAlign" | "strokeCap" | "strokeJoin" | "dashPattern"> {
-  const result: Pick<StoredProperties, "strokes" | "strokeWeight" | "strokeAlign" | "strokeCap" | "strokeJoin" | "dashPattern"> = {};
+function extractStrokes(node: SceneNode): Pick<
+  StoredProperties,
+  | "strokes"
+  | "strokeWeight"
+  | "strokeSideWeights"
+  | "strokeAlign"
+  | "strokeCap"
+  | "strokeJoin"
+  | "dashPattern"
+  | "strokeStyleId"
+> {
+  const result: Pick<
+    StoredProperties,
+    | "strokes"
+    | "strokeWeight"
+    | "strokeSideWeights"
+    | "strokeAlign"
+    | "strokeCap"
+    | "strokeJoin"
+    | "dashPattern"
+    | "strokeStyleId"
+  > = {};
 
   if ("strokes" in node) {
     result.strokes = node.strokes as Paint[];
   }
   if ("strokeWeight" in node) {
     result.strokeWeight = node.strokeWeight;
+
+    if (node.strokeWeight === figma.mixed) {
+      const individual = node as SceneNode & {
+        strokeTopWeight?: number;
+        strokeRightWeight?: number;
+        strokeBottomWeight?: number;
+        strokeLeftWeight?: number;
+      };
+      if (
+        typeof individual.strokeTopWeight === "number" &&
+        typeof individual.strokeRightWeight === "number" &&
+        typeof individual.strokeBottomWeight === "number" &&
+        typeof individual.strokeLeftWeight === "number"
+      ) {
+        result.strokeSideWeights = {
+          top: individual.strokeTopWeight,
+          right: individual.strokeRightWeight,
+          bottom: individual.strokeBottomWeight,
+          left: individual.strokeLeftWeight,
+        };
+      }
+    }
   }
   if ("strokeAlign" in node) {
     result.strokeAlign = node.strokeAlign;
@@ -138,49 +261,63 @@ function extractStrokes(node: SceneNode): Pick<StoredProperties, "strokes" | "st
   if ("dashPattern" in node) {
     result.dashPattern = node.dashPattern;
   }
+  if ("strokeStyleId" in node && typeof node.strokeStyleId === "string" && node.strokeStyleId !== "") {
+    result.strokeStyleId = node.strokeStyleId;
+  }
 
   return result;
 }
 
-function extractEffects(node: SceneNode): Pick<StoredProperties, "effects"> {
+function extractEffects(node: SceneNode): Pick<StoredProperties, "effects" | "effectStyleId"> {
+  const result: Pick<StoredProperties, "effects" | "effectStyleId"> = {};
+
   if ("effects" in node) {
-    return { effects: node.effects as Effect[] };
+    result.effects = node.effects as Effect[];
   }
-  return {};
+  if ("effectStyleId" in node && typeof node.effectStyleId === "string" && node.effectStyleId !== "") {
+    result.effectStyleId = node.effectStyleId;
+  }
+
+  return result;
 }
 
-function extractCornerRadius(node: SceneNode): Pick<StoredProperties, "cornerRadius" | "cornerRadii"> {
+function extractCornerRadius(node: SceneNode): Pick<StoredProperties, "cornerRadius" | "cornerRadii" | "cornerSmoothing"> {
   if (!("cornerRadius" in node)) return {};
 
+  const result: Pick<StoredProperties, "cornerRadius" | "cornerRadii" | "cornerSmoothing"> = {};
   const cr = node.cornerRadius;
 
-  if (typeof cr === 'number') {
-    return { cornerRadius: cr };
+  if (typeof cr === "number") {
+    result.cornerRadius = cr;
+  } else {
+    const topLeft = "topLeftRadius" in node ? node.topLeftRadius : undefined;
+    const topRight = "topRightRadius" in node ? node.topRightRadius : undefined;
+    const bottomLeft = "bottomLeftRadius" in node ? node.bottomLeftRadius : undefined;
+    const bottomRight = "bottomRightRadius" in node ? node.bottomRightRadius : undefined;
+
+    const tlOk = typeof topLeft === "number";
+    const trOk = typeof topRight === "number";
+    const blOk = typeof bottomLeft === "number";
+    const brOk = typeof bottomRight === "number";
+
+    if (tlOk || trOk || blOk || brOk) {
+      result.cornerRadius = cr;
+      result.cornerRadii = {
+        topLeft: tlOk ? topLeft as number : 0,
+        topRight: trOk ? topRight as number : 0,
+        bottomLeft: blOk ? bottomLeft as number : 0,
+        bottomRight: brOk ? bottomRight as number : 0,
+      };
+    } else {
+      result.cornerRadius = cr;
+    }
   }
 
-  const topLeft = "topLeftRadius" in node ? node.topLeftRadius : undefined;
-  const topRight = "topRightRadius" in node ? node.topRightRadius : undefined;
-  const bottomLeft = "bottomLeftRadius" in node ? node.bottomLeftRadius : undefined;
-  const bottomRight = "bottomRightRadius" in node ? node.bottomRightRadius : undefined;
-
-  const tlOk = typeof topLeft === 'number';
-  const trOk = typeof topRight === 'number';
-  const blOk = typeof bottomLeft === 'number';
-  const brOk = typeof bottomRight === 'number';
-
-  if (!tlOk && !trOk && !blOk && !brOk) {
-    return { cornerRadius: cr };
+  if ("cornerSmoothing" in node && typeof node.cornerSmoothing === "number") {
+    result.cornerSmoothing = node.cornerSmoothing;
   }
 
-  return {
-    cornerRadius: cr,
-    cornerRadii: {
-      topLeft: tlOk ? topLeft as number : 0,
-      topRight: trOk ? topRight as number : 0,
-      bottomLeft: blOk ? bottomLeft as number : 0,
-      bottomRight: brOk ? bottomRight as number : 0,
-    },
-  };
+  return result;
 }
 
 function extractOpacityBlend(node: SceneNode): Pick<StoredProperties, "opacity" | "blendMode"> {
@@ -196,11 +333,12 @@ function extractOpacityBlend(node: SceneNode): Pick<StoredProperties, "opacity" 
   return result;
 }
 
-function extractTextStyles(node: SceneNode): Pick<StoredProperties, "textStyles"> {
+function extractTextStyles(node: SceneNode): Pick<StoredProperties, "textStyles" | "textStyleId"> {
   if (node.type !== "TEXT") {
     return {};
   }
 
+  const result: Pick<StoredProperties, "textStyles" | "textStyleId"> = {};
   const textNode = node as TextNode;
   const styles: TextStyles = {};
   let hasMixed = false;
@@ -246,15 +384,36 @@ function extractTextStyles(node: SceneNode): Pick<StoredProperties, "textStyles"
     styles.lineHeight !== undefined || styles.letterSpacing !== undefined ||
     styles.textCase !== undefined || styles.textDecoration !== undefined;
 
-  if (!hasAnyStyle) {
-    return {};
+  if (hasAnyStyle) {
+    if (hasMixed) {
+      styles.hasMixedValues = true;
+    }
+    result.textStyles = styles;
   }
 
-  if (hasMixed) {
-    styles.hasMixedValues = true;
+  if (typeof textNode.textStyleId === "string" && textNode.textStyleId !== "") {
+    result.textStyleId = textNode.textStyleId;
   }
 
-  return { textStyles: styles };
+  return result;
+}
+
+function extractBoundVariables(node: SceneNode): Pick<StoredProperties, "boundVariables"> {
+  const bv = (node as unknown as BoundVariableSource).boundVariables;
+  if (!bv) return {};
+
+  const result: StoredBoundVariables = {};
+  let hasAny = false;
+
+  for (const field of BOUND_VARIABLE_FIELDS) {
+    const alias = bv[field];
+    if (alias && typeof alias.id === "string" && alias.id !== "") {
+      result[field] = alias.id;
+      hasAny = true;
+    }
+  }
+
+  return hasAny ? { boundVariables: result } : {};
 }
 
 function extractAllProperties(node: SceneNode): StoredProperties {
@@ -267,7 +426,62 @@ function extractAllProperties(node: SceneNode): StoredProperties {
     ...extractCornerRadius(node),
     ...extractOpacityBlend(node),
     ...extractTextStyles(node),
+    ...extractBoundVariables(node),
   };
+}
+
+async function populateAuxiliaryNames(props: StoredProperties): Promise<void> {
+  const styleIds = [
+    props.fillStyleId,
+    props.strokeStyleId,
+    props.effectStyleId,
+    props.textStyleId,
+  ];
+  const styles = await Promise.all(styleIds.map((id) => getStyleSafely(id)));
+
+  if (styles[0]) props.fillStyleName = styles[0].name;
+  if (styles[1]) props.strokeStyleName = styles[1].name;
+  if (styles[2]) props.effectStyleName = styles[2].name;
+  if (styles[3]) props.textStyleName = styles[3].name;
+
+  if (props.boundVariables) {
+    const fields: StoredNodeField[] = [];
+    const ids: string[] = [];
+    for (const field of BOUND_VARIABLE_FIELDS) {
+      const id = props.boundVariables[field];
+      if (id) {
+        fields.push(field);
+        ids.push(id);
+      }
+    }
+
+    const variables = await Promise.all(ids.map((id) => getVariableSafely(id)));
+    const names: { [field: string]: string } = {};
+    for (let i = 0; i < fields.length; i++) {
+      const variable = variables[i];
+      if (variable) names[fields[i]] = variable.name;
+    }
+    if (Object.keys(names).length > 0) {
+      props.boundVariableNames = names;
+    }
+  }
+}
+
+async function getStyleSafely(id: string | undefined): Promise<BaseStyle | null> {
+  if (!id) return null;
+  try {
+    return await figma.getStyleByIdAsync(id);
+  } catch {
+    return null;
+  }
+}
+
+async function getVariableSafely(id: string): Promise<Variable | null> {
+  try {
+    return await figma.variables.getVariableByIdAsync(id);
+  } catch {
+    return null;
+  }
 }
 
 function componentToHex(c: number): string {
@@ -333,7 +547,10 @@ function computeStrokesPreview(props: StoredProperties): NonNullable<PropertyPre
   }
 
   let weight = '';
-  if (props.strokeWeight !== undefined && props.strokeWeight !== figma.mixed) {
+  if (props.strokeSideWeights) {
+    const sides = props.strokeSideWeights;
+    weight = `${sides.top}/${sides.right}/${sides.bottom}/${sides.left}px`;
+  } else if (props.strokeWeight !== undefined && props.strokeWeight !== figma.mixed) {
     weight = `${props.strokeWeight}px`;
   }
 
@@ -357,18 +574,23 @@ function computeEffectsPreview(effects: readonly Effect[]): string | undefined {
 }
 
 function computeCornerRadiusPreview(props: StoredProperties): string | undefined {
-  if (props.cornerRadius === undefined) return undefined;
+  if (props.cornerRadius === undefined && props.cornerRadii === undefined) return undefined;
 
+  let radius: string;
   if (props.cornerRadii) {
     const r = props.cornerRadii;
-    return `${r.topLeft} / ${r.topRight} / ${r.bottomLeft} / ${r.bottomRight}`;
+    radius = `${r.topLeft} / ${r.topRight} / ${r.bottomLeft} / ${r.bottomRight}`;
+  } else if (props.cornerRadius !== figma.mixed) {
+    radius = `${props.cornerRadius}`;
+  } else {
+    radius = 'Mixed';
   }
 
-  if (props.cornerRadius !== figma.mixed) {
-    return `${props.cornerRadius}`;
+  if (props.cornerSmoothing !== undefined && props.cornerSmoothing > 0) {
+    radius += `, smoothing ${Math.round(props.cornerSmoothing * 100)}%`;
   }
 
-  return 'Mixed';
+  return radius;
 }
 
 function computeOpacityBlendPreview(props: StoredProperties): string | undefined {
@@ -463,186 +685,635 @@ function getAvailableProperties(props: StoredProperties): string[] {
 // Property Application Functions
 // ============================================================================
 
-function applyFills(node: SceneNode, props: StoredProperties): boolean {
-  if (props.fills === undefined || props.fills === figma.mixed) return false;
-  if (!("fills" in node)) return false;
+function note(reason: ApplyReason, detail?: string): ApplyNote {
+  return detail ? { reason, detail } : { reason };
+}
+
+function applied(notes: ApplyNote[] = []): ApplyResult {
+  return { status: "applied", notes };
+}
+
+function skipped(reason?: ApplyReason, detail?: string): ApplyResult {
+  return { status: "skipped", notes: reason ? [note(reason, detail)] : [] };
+}
+
+function failed(reason?: ApplyReason, detail?: string): ApplyResult {
+  return { status: "failed", notes: reason ? [note(reason, detail)] : [] };
+}
+
+function addNote(notes: ApplyNote[], next: ApplyNote | null): void {
+  if (!next) return;
+  const duplicate = notes.some((existing) => existing.reason === next.reason && existing.detail === next.detail);
+  if (!duplicate) notes.push(next);
+}
+
+async function resolveStyleOfType(id: string, type: "PAINT" | "EFFECT" | "TEXT"): Promise<BaseStyle | null> {
+  const style = await getStyleSafely(id);
+  if (style && style.type === type) return style;
+  return null;
+}
+
+const CORNER_RADIUS_FIELDS: StoredNodeField[] = [
+  "topLeftRadius",
+  "topRightRadius",
+  "bottomLeftRadius",
+  "bottomRightRadius",
+];
+
+const STROKE_SIDE_FIELDS: StoredNodeField[] = [
+  "strokeTopWeight",
+  "strokeRightWeight",
+  "strokeBottomWeight",
+  "strokeLeftWeight",
+];
+
+function layerTypeLabel(node: SceneNode): string {
+  const spaced = node.type.toLowerCase().replace(/_/g, " ");
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+function variableNameFor(props: StoredProperties, field: StoredNodeField): string | undefined {
+  return props.boundVariableNames ? props.boundVariableNames[field] : undefined;
+}
+
+function firstVariableName(props: StoredProperties, fields: StoredNodeField[]): string | undefined {
+  for (const field of fields) {
+    if (props.boundVariables && props.boundVariables[field]) {
+      return variableNameFor(props, field);
+    }
+  }
+  return undefined;
+}
+
+function hasAnyVariable(props: StoredProperties, fields: StoredNodeField[]): boolean {
+  return fields.some((field) => Boolean(props.boundVariables && props.boundVariables[field]));
+}
+
+function getSharedSideVariableId(props: StoredProperties, fields: StoredNodeField[]): string | null {
+  let shared: string | null = null;
+
+  for (const field of fields) {
+    const id = props.boundVariables ? props.boundVariables[field] : undefined;
+    if (!id) return null;
+    if (shared === null) {
+      shared = id;
+    } else if (shared !== id) {
+      return null;
+    }
+  }
+
+  return shared;
+}
+
+async function bindVariableId(
+  node: SceneNode,
+  field: VariableBindableNodeField,
+  variableId: string,
+  variableName: string | undefined
+): Promise<ApplyNote | null> {
+  const variable = await getVariableSafely(variableId);
+  if (!variable) return note("variable-unavailable", variableName);
 
   try {
-    (node as GeometryMixin).fills = [...props.fills];
-    return true;
+    node.setBoundVariable(field, variable);
+    return null;
   } catch {
-    return false;
+    return note("variable-not-bindable", layerTypeLabel(node));
   }
 }
 
-function applyStrokes(node: SceneNode, props: StoredProperties): boolean {
-  if (props.strokes === undefined) return false;
-  if (!("strokes" in node)) return false;
+async function bindFieldVariable(
+  node: SceneNode,
+  field: StoredNodeField,
+  props: StoredProperties
+): Promise<ApplyNote | null> {
+  const id = props.boundVariables ? props.boundVariables[field] : undefined;
+  if (!id) return null;
+  if (!(field in node)) return null;
 
-  try {
-    const strokeNode = node as MinimalStrokesMixin;
-    let didApply = false;
-
-    if (props.strokes) {
-      strokeNode.strokes = [...props.strokes];
-      didApply = true;
-    }
-    if (props.strokeWeight !== undefined && props.strokeWeight !== figma.mixed) {
-      strokeNode.strokeWeight = props.strokeWeight;
-      didApply = true;
-    }
-    if (props.strokeAlign !== undefined) {
-      strokeNode.strokeAlign = props.strokeAlign;
-      didApply = true;
-    }
-
-    // These properties are on nodes that support individual stroke settings
-    const extendedNode = node as SceneNode & { strokeCap?: StrokeCap; strokeJoin?: StrokeJoin; dashPattern?: number[] };
-    if ("strokeCap" in extendedNode && props.strokeCap !== undefined && props.strokeCap !== figma.mixed) {
-      extendedNode.strokeCap = props.strokeCap;
-    }
-    if ("strokeJoin" in extendedNode && props.strokeJoin !== undefined && props.strokeJoin !== figma.mixed) {
-      extendedNode.strokeJoin = props.strokeJoin;
-    }
-    if ("dashPattern" in extendedNode && props.dashPattern !== undefined) {
-      extendedNode.dashPattern = [...props.dashPattern];
-    }
-
-    return didApply;
-  } catch {
-    return false;
-  }
+  return bindVariableId(node, field, id, variableNameFor(props, field));
 }
 
-function applyEffects(node: SceneNode, props: StoredProperties): boolean {
-  if (props.effects === undefined) return false;
-  if (!("effects" in node)) return false;
+async function applyFills(node: SceneNode, props: StoredProperties): Promise<ApplyResult> {
+  if (props.fills === undefined || props.fills === figma.mixed) return skipped("unsupported-layer");
+  if (!("fills" in node)) return skipped("unsupported-layer");
 
-  try {
-    (node as BlendMixin).effects = [...props.effects];
-    return true;
-  } catch {
-    return false;
-  }
-}
+  const fillNode = node as SceneNode & {
+    fills: readonly Paint[];
+    setFillStyleIdAsync(styleId: string): Promise<void>;
+  };
 
-function applyCornerRadius(node: SceneNode, props: StoredProperties): boolean {
-  if (props.cornerRadius === undefined && props.cornerRadii === undefined) return false;
-  if (!("cornerRadius" in node)) return false;
+  let styleFallback: string | undefined;
+  let hasStyleFallback = false;
 
-  try {
-    const cornerNode = node as CornerMixin;
-    let didApply = false;
-
-    if (props.cornerRadii) {
-      // Apply individual corner radii if available
-      if ("topLeftRadius" in node && "topRightRadius" in node && "bottomLeftRadius" in node && "bottomRightRadius" in node) {
-        const rectNode = node as RectangleNode | FrameNode | ComponentNode | InstanceNode;
-        rectNode.topLeftRadius = props.cornerRadii.topLeft;
-        rectNode.topRightRadius = props.cornerRadii.topRight;
-        rectNode.bottomLeftRadius = props.cornerRadii.bottomLeft;
-        rectNode.bottomRightRadius = props.cornerRadii.bottomRight;
-        didApply = true;
+  if (props.fillStyleId) {
+    const style = await resolveStyleOfType(props.fillStyleId, "PAINT");
+    if (style) {
+      try {
+        await fillNode.setFillStyleIdAsync(props.fillStyleId);
+        return applied();
+      } catch {
+        styleFallback = props.fillStyleName;
+        hasStyleFallback = true;
       }
-    } else if (props.cornerRadius !== figma.mixed && props.cornerRadius !== undefined) {
-      cornerNode.cornerRadius = props.cornerRadius as number;
-      didApply = true;
+    } else {
+      styleFallback = props.fillStyleName;
+      hasStyleFallback = true;
     }
+  }
 
-    return didApply;
+  try {
+    fillNode.fills = Array.from(props.fills);
+    return hasStyleFallback ? applied([note("style-unavailable", styleFallback)]) : applied();
   } catch {
-    return false;
+    return failed("error");
   }
 }
 
-function applyOpacityBlend(node: SceneNode, props: StoredProperties): boolean {
-  if (props.opacity === undefined && props.blendMode === undefined) return false;
+async function applyStrokes(node: SceneNode, props: StoredProperties): Promise<ApplyResult> {
+  if (props.strokes === undefined) return skipped("unsupported-layer");
+  if (!("strokes" in node)) return skipped("unsupported-layer");
+
+  const strokeNode = node as SceneNode & {
+    strokes: readonly Paint[];
+    strokeWeight: number | typeof figma.mixed;
+    strokeAlign: "CENTER" | "INSIDE" | "OUTSIDE";
+    strokeCap?: StrokeCap | typeof figma.mixed;
+    strokeJoin?: StrokeJoin | typeof figma.mixed;
+    dashPattern: readonly number[];
+    strokeTopWeight?: number;
+    strokeRightWeight?: number;
+    strokeBottomWeight?: number;
+    strokeLeftWeight?: number;
+    setStrokeStyleIdAsync(styleId: string): Promise<void>;
+  };
 
   let didApply = false;
+  let styleFallback: string | undefined;
+  let hasStyleFallback = false;
+  let styleApplied = false;
+
+  if (props.strokeStyleId) {
+    const style = await resolveStyleOfType(props.strokeStyleId, "PAINT");
+    if (style) {
+      try {
+        await strokeNode.setStrokeStyleIdAsync(props.strokeStyleId);
+        didApply = true;
+        styleApplied = true;
+      } catch {
+        styleFallback = props.strokeStyleName;
+        hasStyleFallback = true;
+      }
+    } else {
+      styleFallback = props.strokeStyleName;
+      hasStyleFallback = true;
+    }
+  }
+
+  if (!styleApplied) {
+    try {
+      strokeNode.strokes = Array.from(props.strokes);
+      didApply = true;
+    } catch {
+      // Stroke paints are applied below where possible.
+    }
+  }
+
+  const supportsSideWeights =
+    typeof strokeNode.strokeTopWeight === "number" &&
+    typeof strokeNode.strokeRightWeight === "number" &&
+    typeof strokeNode.strokeBottomWeight === "number" &&
+    typeof strokeNode.strokeLeftWeight === "number" &&
+    "strokeTopWeight" in node &&
+    "strokeRightWeight" in node &&
+    "strokeBottomWeight" in node &&
+    "strokeLeftWeight" in node;
+
+  if (props.strokeSideWeights) {
+    const sides = props.strokeSideWeights;
+    if (supportsSideWeights) {
+      try {
+        strokeNode.strokeTopWeight = sides.top;
+        strokeNode.strokeRightWeight = sides.right;
+        strokeNode.strokeBottomWeight = sides.bottom;
+        strokeNode.strokeLeftWeight = sides.left;
+        didApply = true;
+      } catch {
+        // Fall through to the largest side as a uniform weight.
+        try {
+          strokeNode.strokeWeight = Math.max(sides.top, sides.right, sides.bottom, sides.left);
+          didApply = true;
+        } catch {
+          // Weight stays untouched.
+        }
+      }
+    } else {
+      try {
+        strokeNode.strokeWeight = Math.max(sides.top, sides.right, sides.bottom, sides.left);
+        didApply = true;
+      } catch {
+        // Weight stays untouched.
+      }
+    }
+  } else if (props.strokeWeight !== undefined && props.strokeWeight !== figma.mixed) {
+    try {
+      strokeNode.strokeWeight = props.strokeWeight;
+      didApply = true;
+    } catch {
+      // Weight stays untouched.
+    }
+  }
+
+  if (props.strokeAlign !== undefined) {
+    try {
+      strokeNode.strokeAlign = props.strokeAlign;
+      didApply = true;
+    } catch {
+      // Alignment stays untouched.
+    }
+  }
+
+  if (props.strokeCap !== undefined && props.strokeCap !== figma.mixed && "strokeCap" in node) {
+    try {
+      strokeNode.strokeCap = props.strokeCap;
+      didApply = true;
+    } catch {
+      // Cap stays untouched.
+    }
+  }
+
+  if (props.strokeJoin !== undefined && props.strokeJoin !== figma.mixed && "strokeJoin" in node) {
+    try {
+      strokeNode.strokeJoin = props.strokeJoin;
+      didApply = true;
+    } catch {
+      // Join stays untouched.
+    }
+  }
+
+  if (props.dashPattern !== undefined && "dashPattern" in node) {
+    try {
+      strokeNode.dashPattern = Array.from(props.dashPattern);
+      didApply = true;
+    } catch {
+      // Dash pattern stays untouched.
+    }
+  }
+
+  const notes: ApplyNote[] = [];
+  if (hasStyleFallback) addNote(notes, note("style-unavailable", styleFallback));
+
+  if (props.strokeSideWeights) {
+    if (supportsSideWeights) {
+      for (const field of STROKE_SIDE_FIELDS) {
+        addNote(notes, await bindFieldVariable(node, field, props));
+      }
+    } else {
+      const sharedId = getSharedSideVariableId(props, STROKE_SIDE_FIELDS);
+      if (sharedId) {
+        addNote(notes, await bindVariableId(
+          node,
+          "strokeWeight",
+          sharedId,
+          firstVariableName(props, STROKE_SIDE_FIELDS)
+        ));
+      } else if (hasAnyVariable(props, STROKE_SIDE_FIELDS)) {
+        addNote(notes, note("variable-not-bindable", layerTypeLabel(node)));
+      } else {
+        addNote(notes, await bindFieldVariable(node, "strokeWeight", props));
+      }
+    }
+  } else {
+    addNote(notes, await bindFieldVariable(node, "strokeWeight", props));
+  }
+
+  if (!didApply) return failed("error");
+  return applied(notes);
+}
+
+async function applyEffects(node: SceneNode, props: StoredProperties): Promise<ApplyResult> {
+  if (props.effects === undefined) return skipped("unsupported-layer");
+  if (!("effects" in node)) return skipped("unsupported-layer");
+
+  const effectNode = node as SceneNode & {
+    effects: readonly Effect[];
+    setEffectStyleIdAsync(styleId: string): Promise<void>;
+  };
+
+  let styleFallback: string | undefined;
+  let hasStyleFallback = false;
+
+  if (props.effectStyleId) {
+    const style = await resolveStyleOfType(props.effectStyleId, "EFFECT");
+    if (style) {
+      try {
+        await effectNode.setEffectStyleIdAsync(props.effectStyleId);
+        return applied();
+      } catch {
+        styleFallback = props.effectStyleName;
+        hasStyleFallback = true;
+      }
+    } else {
+      styleFallback = props.effectStyleName;
+      hasStyleFallback = true;
+    }
+  }
+
   try {
-    if ("opacity" in node && props.opacity !== undefined) {
-      (node as BlendMixin).opacity = props.opacity;
-      didApply = true;
-    }
-    if ("blendMode" in node && props.blendMode !== undefined) {
-      (node as BlendMixin).blendMode = props.blendMode;
-      didApply = true;
-    }
-    return didApply;
+    effectNode.effects = Array.from(props.effects);
+    return hasStyleFallback ? applied([note("style-unavailable", styleFallback)]) : applied();
   } catch {
-    return false;
+    return failed("error");
   }
 }
 
-async function applyTextStyles(node: SceneNode, props: StoredProperties): Promise<boolean> {
-  if (props.textStyles === undefined) return false;
-  if (node.type !== "TEXT") return false;
+async function applyCornerRadius(node: SceneNode, props: StoredProperties): Promise<ApplyResult> {
+  if (props.cornerRadius === undefined && props.cornerRadii === undefined && props.cornerSmoothing === undefined) {
+    return skipped("unsupported-layer");
+  }
+  if (!("cornerRadius" in node)) return skipped("unsupported-layer");
 
-  try {
-    const textNode = node as TextNode;
-    const styles = props.textStyles;
-    let didApply = false;
+  const cornerNode = node as SceneNode & {
+    cornerRadius: number | typeof figma.mixed;
+    cornerSmoothing?: number;
+    topLeftRadius?: number;
+    topRightRadius?: number;
+    bottomLeftRadius?: number;
+    bottomRightRadius?: number;
+  };
 
-    // Must load font before applying text styles
-    if (styles.fontName) {
-      await figma.loadFontAsync(styles.fontName);
-      textNode.fontName = styles.fontName;
-      didApply = true;
-    } else {
-      // Load existing font to allow other text property changes
-      if (textNode.fontName !== figma.mixed) {
-        await figma.loadFontAsync(textNode.fontName);
+  const supportsSideRadii =
+    "topLeftRadius" in node &&
+    "topRightRadius" in node &&
+    "bottomLeftRadius" in node &&
+    "bottomRightRadius" in node;
+
+  let didApply = false;
+
+  if (props.cornerRadii) {
+    if (supportsSideRadii) {
+      try {
+        cornerNode.topLeftRadius = props.cornerRadii.topLeft;
+        cornerNode.topRightRadius = props.cornerRadii.topRight;
+        cornerNode.bottomLeftRadius = props.cornerRadii.bottomLeft;
+        cornerNode.bottomRightRadius = props.cornerRadii.bottomRight;
+        didApply = true;
+      } catch {
+        // Fall through to a uniform radius below.
       }
     }
 
-    if (styles.fontSize !== undefined) { textNode.fontSize = styles.fontSize; didApply = true; }
-    if (styles.lineHeight !== undefined) { textNode.lineHeight = styles.lineHeight; didApply = true; }
-    if (styles.letterSpacing !== undefined) { textNode.letterSpacing = styles.letterSpacing; didApply = true; }
-    if (styles.textCase !== undefined) { textNode.textCase = styles.textCase; didApply = true; }
-    if (styles.textDecoration !== undefined) { textNode.textDecoration = styles.textDecoration; didApply = true; }
-
-    return didApply;
-  } catch {
-    return false;
+    if (!didApply) {
+      try {
+        cornerNode.cornerRadius = props.cornerRadii.topLeft;
+        didApply = true;
+      } catch {
+        // Radius stays untouched.
+      }
+    }
+  } else if (props.cornerRadius !== undefined && props.cornerRadius !== figma.mixed) {
+    try {
+      cornerNode.cornerRadius = props.cornerRadius;
+      didApply = true;
+    } catch {
+      // Radius stays untouched.
+    }
   }
+
+  if (props.cornerSmoothing !== undefined && "cornerSmoothing" in node) {
+    try {
+      cornerNode.cornerSmoothing = props.cornerSmoothing;
+      didApply = true;
+    } catch {
+      // Smoothing stays untouched.
+    }
+  }
+
+  const notes: ApplyNote[] = [];
+  if (supportsSideRadii) {
+    for (const field of CORNER_RADIUS_FIELDS) {
+      addNote(notes, await bindFieldVariable(node, field, props));
+    }
+  } else if (hasAnyVariable(props, CORNER_RADIUS_FIELDS)) {
+    // Uniform-only targets cannot bind corner radius variables without side fields.
+    addNote(notes, note("variable-not-bindable", layerTypeLabel(node)));
+  }
+
+  if (!didApply) return failed("error");
+  return applied(notes);
 }
 
-async function applyProperties(node: SceneNode, props: StoredProperties, propertiesToApply: string[]): Promise<{ success: string[]; failed: string[] }> {
-  const success: string[] = [];
-  const failed: string[] = [];
+async function applyOpacityBlend(node: SceneNode, props: StoredProperties): Promise<ApplyResult> {
+  if (props.opacity === undefined && props.blendMode === undefined) return skipped("unsupported-layer");
+
+  const supportsOpacity = "opacity" in node;
+  const supportsBlend = "blendMode" in node;
+  if (!supportsOpacity && !supportsBlend) return skipped("unsupported-layer");
+
+  const blendNode = node as SceneNode & { opacity: number; blendMode: BlendMode };
+  let didApply = false;
+
+  if (supportsOpacity && props.opacity !== undefined) {
+    try {
+      blendNode.opacity = props.opacity;
+      didApply = true;
+    } catch {
+      // Opacity stays untouched.
+    }
+  }
+
+  if (supportsBlend && props.blendMode !== undefined) {
+    try {
+      blendNode.blendMode = props.blendMode;
+      didApply = true;
+    } catch {
+      // Blend mode stays untouched.
+    }
+  }
+
+  const notes: ApplyNote[] = [];
+  if (supportsOpacity) {
+    addNote(notes, await bindFieldVariable(node, "opacity", props));
+  }
+
+  if (!didApply) return failed("error");
+  return applied(notes);
+}
+
+function getMissingFontDetail(textNode: TextNode): string | undefined {
+  const fontName = textNode.fontName;
+  if (fontName !== figma.mixed) return fontName.family;
+
+  try {
+    const length = textNode.characters.length;
+    if (length > 0) {
+      const names = textNode.getRangeAllFontNames(0, length);
+      if (names.length > 0) return names[0].family;
+    }
+  } catch {
+    // Best effort only.
+  }
+
+  return undefined;
+}
+
+function collectFontsToLoad(textNode: TextNode, styles: TextStyles): FontName[] {
+  const fonts: FontName[] = [];
+  const seen: { [key: string]: boolean } = {};
+
+  const add = (font: FontName): void => {
+    const key = `${font.family}\u0000${font.style}`;
+    if (seen[key]) return;
+    seen[key] = true;
+    fonts.push(font);
+  };
+
+  const length = textNode.characters.length;
+  if (length > 0) {
+    try {
+      const rangeFonts = textNode.getRangeAllFontNames(0, length);
+      for (const font of rangeFonts) add(font);
+    } catch {
+      // Range fonts can fail on unusual text nodes; the fontName fallback below still helps.
+    }
+  } else if (textNode.fontName !== figma.mixed) {
+    add(textNode.fontName);
+  }
+
+  if (styles.fontName) add(styles.fontName);
+
+  return fonts;
+}
+
+async function applyTextStyles(node: SceneNode, props: StoredProperties): Promise<ApplyResult> {
+  if (props.textStyles === undefined) return skipped("unsupported-layer");
+  if (node.type !== "TEXT") return skipped("unsupported-layer");
+
+  const textNode = node as TextNode;
+
+  if (textNode.hasMissingFont) {
+    return skipped("missing-font", getMissingFontDetail(textNode));
+  }
+
+  const styles = props.textStyles;
+
+  // Load every font used by the target and the source before touching text properties.
+  const fonts = collectFontsToLoad(textNode, styles);
+  try {
+    await Promise.all(fonts.map((font) => figma.loadFontAsync(font)));
+  } catch {
+    return failed("missing-font", styles.fontName ? styles.fontName.family : undefined);
+  }
+
+  let styleFallback: string | undefined;
+  let hasStyleFallback = false;
+
+  if (props.textStyleId) {
+    const style = await resolveStyleOfType(props.textStyleId, "TEXT");
+    if (style) {
+      try {
+        await textNode.setTextStyleIdAsync(props.textStyleId);
+        return applied();
+      } catch {
+        styleFallback = props.textStyleName;
+        hasStyleFallback = true;
+      }
+    } else {
+      styleFallback = props.textStyleName;
+      hasStyleFallback = true;
+    }
+  }
+
+  let didApply = false;
+
+  if (styles.fontName) {
+    try {
+      textNode.fontName = styles.fontName;
+      didApply = true;
+    } catch {
+      // Font stays untouched.
+    }
+  }
+  if (styles.fontSize !== undefined) {
+    try {
+      textNode.fontSize = styles.fontSize;
+      didApply = true;
+    } catch {
+      // Size stays untouched.
+    }
+  }
+  if (styles.lineHeight !== undefined) {
+    try {
+      textNode.lineHeight = styles.lineHeight;
+      didApply = true;
+    } catch {
+      // Line height stays untouched.
+    }
+  }
+  if (styles.letterSpacing !== undefined) {
+    try {
+      textNode.letterSpacing = styles.letterSpacing;
+      didApply = true;
+    } catch {
+      // Letter spacing stays untouched.
+    }
+  }
+  if (styles.textCase !== undefined) {
+    try {
+      textNode.textCase = styles.textCase;
+      didApply = true;
+    } catch {
+      // Text case stays untouched.
+    }
+  }
+  if (styles.textDecoration !== undefined) {
+    try {
+      textNode.textDecoration = styles.textDecoration;
+      didApply = true;
+    } catch {
+      // Decoration stays untouched.
+    }
+  }
+
+  if (!didApply) return failed("error");
+  if (hasStyleFallback) return applied([note("style-unavailable", styleFallback)]);
+  return applied();
+}
+
+async function applyProperties(node: SceneNode, props: StoredProperties, propertiesToApply: string[]): Promise<PropertyResults> {
+  const results: PropertyResults = {};
 
   for (const prop of propertiesToApply) {
-    let result = false;
+    let result: ApplyResult = failed("error");
 
     switch (prop) {
       case "fills":
-        result = applyFills(node, props);
+        result = await applyFills(node, props);
         break;
       case "strokes":
-        result = applyStrokes(node, props);
+        result = await applyStrokes(node, props);
         break;
       case "effects":
-        result = applyEffects(node, props);
+        result = await applyEffects(node, props);
         break;
       case "cornerRadius":
-        result = applyCornerRadius(node, props);
+        result = await applyCornerRadius(node, props);
         break;
       case "opacityBlend":
-        result = applyOpacityBlend(node, props);
+        result = await applyOpacityBlend(node, props);
         break;
       case "textStyles":
         result = await applyTextStyles(node, props);
         break;
+      default:
+        result = skipped("unsupported-layer");
+        break;
     }
 
-    if (result) {
-      success.push(prop);
-    } else {
-      failed.push(prop);
-    }
+    results[prop] = result;
   }
 
-  return { success, failed };
+  return results;
 }
 
 // ============================================================================
@@ -702,6 +1373,7 @@ async function handleCopy(): Promise<void> {
   let properties: StoredProperties;
   try {
     properties = extractAllProperties(node);
+    await populateAuxiliaryNames(properties);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     figma.ui.postMessage({
@@ -764,22 +1436,31 @@ async function handlePaste(propertiesToPaste: string[]): Promise<void> {
 
   let totalSuccess = 0;
   let totalFailed = 0;
+  let totalSkipped = 0;
 
   for (const node of selection) {
     const result = await applyProperties(node, stored, propertiesToPaste);
-    totalSuccess += result.success.length;
-    totalFailed += result.failed.length;
+    for (const prop of Object.keys(result)) {
+      const propertyResult = result[prop];
+      if (propertyResult.status === "applied") {
+        totalSuccess++;
+      } else if (propertyResult.status === "skipped") {
+        totalSkipped++;
+      } else {
+        totalFailed++;
+      }
+    }
   }
 
   figma.commitUndo();
 
-  const message = totalFailed > 0
-    ? `Applied ${totalSuccess} properties. ${totalFailed} couldn't be applied (incompatible node types).`
+  const message = totalFailed > 0 || totalSkipped > 0
+    ? `Applied ${totalSuccess} properties. ${totalFailed + totalSkipped} couldn't be applied (incompatible node types).`
     : `Successfully applied ${totalSuccess} properties to ${selection.length} element(s).`;
 
   figma.ui.postMessage({
     type: "paste-complete",
-    success: totalFailed === 0,
+    success: totalFailed === 0 && totalSkipped === 0,
     message,
   } as MessageToUI);
 
