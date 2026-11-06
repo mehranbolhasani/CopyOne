@@ -43,7 +43,7 @@ type StoredNodeField =
 type StoredBoundVariables = Partial<Record<StoredNodeField, string>>;
 
 interface StoredProperties {
-  // Source element info
+  // Source layer info
   sourceName: string;
   sourceType: string;
 
@@ -87,6 +87,59 @@ interface StoredProperties {
   boundVariableNames?: { [field: string]: string };
 }
 
+interface SerializedProperties {
+  sourceName: string;
+  sourceType: string;
+
+  fills: readonly Paint[] | null;
+  fillsMixed: boolean;
+  fillStyleId: string | null;
+  fillStyleName: string | null;
+
+  strokes: readonly Paint[] | null;
+  strokeWeight: number | null;
+  strokeWeightMixed: boolean;
+  strokeSideWeights: StrokeSideWeights | null;
+  strokeAlign: "CENTER" | "INSIDE" | "OUTSIDE" | null;
+  strokeCap: StrokeCap | null;
+  strokeCapMixed: boolean;
+  strokeJoin: StrokeJoin | null;
+  strokeJoinMixed: boolean;
+  dashPattern: readonly number[] | null;
+  strokeStyleId: string | null;
+  strokeStyleName: string | null;
+
+  effects: readonly Effect[] | null;
+  effectStyleId: string | null;
+  effectStyleName: string | null;
+
+  cornerRadius: number | null;
+  cornerRadiusMixed: boolean;
+  cornerRadii: CornerRadii | null;
+  cornerSmoothing: number | null;
+
+  opacity: number | null;
+  blendMode: BlendMode | null;
+
+  textStyles: TextStyles | null;
+  textStyleId: string | null;
+  textStyleName: string | null;
+
+  boundVariables: StoredBoundVariables | null;
+  boundVariableNames: { [field: string]: string } | null;
+}
+
+interface ClipboardPayload {
+  schema: 1;
+  savedAt: string;
+  data: SerializedProperties;
+}
+
+interface PrefsPayload {
+  schema: 1;
+  checked: { [property: string]: boolean };
+}
+
 interface PropertyPreviews {
   fills?: {
     swatches: string[];
@@ -100,7 +153,8 @@ interface PropertyPreviews {
   };
   effects?: string;
   cornerRadius?: string;
-  opacityBlend?: string;
+  opacity?: string;
+  blendMode?: string;
   textStyles?: string;
   textStylesPartial?: boolean;
 }
@@ -135,14 +189,27 @@ type MessageToPlugin =
   | { type: "copy" }
   | { type: "paste"; properties: string[] }
   | { type: "get-selection" }
+  | { type: "save-prefs"; checked: { [property: string]: boolean } }
+  | { type: "clear-clipboard" }
   | { type: "resize-ui"; height: number };
 
 type MessageToUI =
   | { type: "version"; version: string }
   | { type: "build-info"; devLabel: string; buildStamp: string }
-  | { type: "selection-changed"; hasSelection: boolean; nodeName?: string; nodeType?: string }
+  | { type: "selection-changed"; hasSelection: boolean; count: number; nodeName?: string; nodeType?: string }
   | { type: "property-labels"; labels: { [property: string]: string } }
-  | { type: "properties-copied"; sourceName: string; sourceType: string; availableProperties: string[]; previews: PropertyPreviews }
+  | {
+      type: "properties-copied";
+      sourceName: string;
+      sourceType: string;
+      availableProperties: string[];
+      defaultValued: string[];
+      mixed: string[];
+      previews: PropertyPreviews;
+      restored: boolean;
+    }
+  | { type: "prefs"; checked: { [property: string]: boolean } }
+  | { type: "clipboard-cleared" }
   | { type: "paste-complete"; level: MessageLevel; message: string; moreSentences?: string[] }
   | { type: "info"; message: string }
   | { type: "error"; message: string };
@@ -152,12 +219,14 @@ type MessageToUI =
 // ============================================================================
 
 let _stored: StoredProperties | null = null;
+let clipboardChangedSinceStartup = false;
+let prefsChangedSinceStartup = false;
 
 function getStored(): StoredProperties | null {
   return _stored;
 }
 
-function setStored(value: StoredProperties): void {
+function setStored(value: StoredProperties | null): void {
   _stored = value;
 }
 const PLUGIN_VERSION = "__PLUGIN_VERSION__";
@@ -166,6 +235,9 @@ const PLUGIN_DEV_LABEL = "__PLUGIN_DEV_LABEL__";
 const UI_WIDTH = 300;
 const UI_MIN_HEIGHT = 420;
 const UI_MAX_HEIGHT = 1200;
+const CLIPBOARD_KEY = "copyone.clipboard.v1";
+const PREFS_KEY = "copyone.prefs.v1";
+const STORAGE_SCHEMA = 1;
 
 const BOUND_VARIABLE_FIELDS: StoredNodeField[] = [
   "topLeftRadius",
@@ -187,7 +259,8 @@ const PROPERTY_LABELS: { [property: string]: string } = {
   strokes: "Strokes",
   effects: "Effects",
   cornerRadius: "Corner radius",
-  opacityBlend: "Opacity & blend",
+  opacity: "Opacity",
+  blendMode: "Blend mode",
   textStyles: "Text styles",
 };
 
@@ -526,6 +599,383 @@ async function getVariableSafely(id: string): Promise<Variable | null> {
   }
 }
 
+// ============================================================================
+// Clipboard serialization
+// ============================================================================
+
+const SERIALIZED_KEYS: string[] = [
+  "sourceName",
+  "sourceType",
+  "fills",
+  "fillsMixed",
+  "fillStyleId",
+  "fillStyleName",
+  "strokes",
+  "strokeWeight",
+  "strokeWeightMixed",
+  "strokeSideWeights",
+  "strokeAlign",
+  "strokeCap",
+  "strokeCapMixed",
+  "strokeJoin",
+  "strokeJoinMixed",
+  "dashPattern",
+  "strokeStyleId",
+  "strokeStyleName",
+  "effects",
+  "effectStyleId",
+  "effectStyleName",
+  "cornerRadius",
+  "cornerRadiusMixed",
+  "cornerRadii",
+  "cornerSmoothing",
+  "opacity",
+  "blendMode",
+  "textStyles",
+  "textStyleId",
+  "textStyleName",
+  "boundVariables",
+  "boundVariableNames",
+];
+
+function serializeProperties(props: StoredProperties): SerializedProperties {
+  return {
+    sourceName: props.sourceName,
+    sourceType: props.sourceType,
+
+    fills: props.fills !== undefined && props.fills !== figma.mixed ? Array.from(props.fills) : null,
+    fillsMixed: props.fills === figma.mixed,
+    fillStyleId: props.fillStyleId || null,
+    fillStyleName: props.fillStyleName || null,
+
+    strokes: props.strokes !== undefined ? Array.from(props.strokes) : null,
+    strokeWeight: props.strokeWeight !== undefined && props.strokeWeight !== figma.mixed ? props.strokeWeight : null,
+    strokeWeightMixed: props.strokeWeight === figma.mixed,
+    strokeSideWeights: props.strokeSideWeights
+      ? {
+          top: props.strokeSideWeights.top,
+          right: props.strokeSideWeights.right,
+          bottom: props.strokeSideWeights.bottom,
+          left: props.strokeSideWeights.left,
+        }
+      : null,
+    strokeAlign: props.strokeAlign || null,
+    strokeCap: props.strokeCap !== undefined && props.strokeCap !== figma.mixed ? props.strokeCap : null,
+    strokeCapMixed: props.strokeCap === figma.mixed,
+    strokeJoin: props.strokeJoin !== undefined && props.strokeJoin !== figma.mixed ? props.strokeJoin : null,
+    strokeJoinMixed: props.strokeJoin === figma.mixed,
+    dashPattern: props.dashPattern ? Array.from(props.dashPattern) : null,
+    strokeStyleId: props.strokeStyleId || null,
+    strokeStyleName: props.strokeStyleName || null,
+
+    effects: props.effects ? Array.from(props.effects) : null,
+    effectStyleId: props.effectStyleId || null,
+    effectStyleName: props.effectStyleName || null,
+
+    cornerRadius: props.cornerRadius !== undefined && props.cornerRadius !== figma.mixed ? props.cornerRadius : null,
+    cornerRadiusMixed: props.cornerRadius === figma.mixed,
+    cornerRadii: props.cornerRadii
+      ? {
+          topLeft: props.cornerRadii.topLeft,
+          topRight: props.cornerRadii.topRight,
+          bottomLeft: props.cornerRadii.bottomLeft,
+          bottomRight: props.cornerRadii.bottomRight,
+        }
+      : null,
+    cornerSmoothing: props.cornerSmoothing === undefined ? null : props.cornerSmoothing,
+
+    opacity: props.opacity === undefined ? null : props.opacity,
+    blendMode: props.blendMode || null,
+
+    textStyles: props.textStyles ? { ...props.textStyles } : null,
+    textStyleId: props.textStyleId || null,
+    textStyleName: props.textStyleName || null,
+
+    boundVariables: props.boundVariables ? { ...props.boundVariables } : null,
+    boundVariableNames: props.boundVariableNames ? { ...props.boundVariableNames } : null,
+  };
+}
+
+function deserializeProperties(data: SerializedProperties): StoredProperties {
+  const props: StoredProperties = {
+    sourceName: data.sourceName,
+    sourceType: data.sourceType,
+  };
+
+  if (data.fillsMixed) {
+    props.fills = figma.mixed;
+  } else if (data.fills !== null) {
+    props.fills = data.fills;
+  }
+  if (data.fillStyleId !== null) props.fillStyleId = data.fillStyleId;
+  if (data.fillStyleName !== null) props.fillStyleName = data.fillStyleName;
+
+  if (data.strokes !== null) props.strokes = data.strokes;
+  if (data.strokeWeightMixed) {
+    props.strokeWeight = figma.mixed;
+  } else if (data.strokeWeight !== null) {
+    props.strokeWeight = data.strokeWeight;
+  }
+  if (data.strokeSideWeights !== null) {
+    props.strokeSideWeights = {
+      top: data.strokeSideWeights.top,
+      right: data.strokeSideWeights.right,
+      bottom: data.strokeSideWeights.bottom,
+      left: data.strokeSideWeights.left,
+    };
+  }
+  if (data.strokeAlign !== null) props.strokeAlign = data.strokeAlign;
+  if (data.strokeCapMixed) {
+    props.strokeCap = figma.mixed;
+  } else if (data.strokeCap !== null) {
+    props.strokeCap = data.strokeCap;
+  }
+  if (data.strokeJoinMixed) {
+    props.strokeJoin = figma.mixed;
+  } else if (data.strokeJoin !== null) {
+    props.strokeJoin = data.strokeJoin;
+  }
+  if (data.dashPattern !== null) props.dashPattern = data.dashPattern;
+  if (data.strokeStyleId !== null) props.strokeStyleId = data.strokeStyleId;
+  if (data.strokeStyleName !== null) props.strokeStyleName = data.strokeStyleName;
+
+  if (data.effects !== null) props.effects = data.effects;
+  if (data.effectStyleId !== null) props.effectStyleId = data.effectStyleId;
+  if (data.effectStyleName !== null) props.effectStyleName = data.effectStyleName;
+
+  if (data.cornerRadiusMixed) {
+    props.cornerRadius = figma.mixed;
+  } else if (data.cornerRadius !== null) {
+    props.cornerRadius = data.cornerRadius;
+  }
+  if (data.cornerRadii !== null) {
+    props.cornerRadii = {
+      topLeft: data.cornerRadii.topLeft,
+      topRight: data.cornerRadii.topRight,
+      bottomLeft: data.cornerRadii.bottomLeft,
+      bottomRight: data.cornerRadii.bottomRight,
+    };
+  }
+  if (data.cornerSmoothing !== null) props.cornerSmoothing = data.cornerSmoothing;
+
+  if (data.opacity !== null) props.opacity = data.opacity;
+  if (data.blendMode !== null) props.blendMode = data.blendMode;
+
+  if (data.textStyles !== null) props.textStyles = data.textStyles;
+  if (data.textStyleId !== null) props.textStyleId = data.textStyleId;
+  if (data.textStyleName !== null) props.textStyleName = data.textStyleName;
+
+  if (data.boundVariables !== null) props.boundVariables = data.boundVariables;
+  if (data.boundVariableNames !== null) props.boundVariableNames = data.boundVariableNames;
+
+  return props;
+}
+
+function isRecord(value: unknown): value is { [key: string]: unknown } {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isStringOrNull(value: unknown): boolean {
+  return value === null || typeof value === "string";
+}
+
+function isNumberOrNull(value: unknown): boolean {
+  return value === null || typeof value === "number";
+}
+
+function isTypedRecordArray(value: unknown): boolean {
+  return Array.isArray(value) && value.every((entry) => isRecord(entry) && typeof entry.type === "string");
+}
+
+function isNumberArray(value: unknown): boolean {
+  return Array.isArray(value) && value.every((entry) => typeof entry === "number");
+}
+
+function isStringMap(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return Object.keys(value).every((key) => typeof value[key] === "string");
+}
+
+function isSideWeights(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return typeof value.top === "number" &&
+    typeof value.right === "number" &&
+    typeof value.bottom === "number" &&
+    typeof value.left === "number";
+}
+
+function isCornerRadii(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return typeof value.topLeft === "number" &&
+    typeof value.topRight === "number" &&
+    typeof value.bottomLeft === "number" &&
+    typeof value.bottomRight === "number";
+}
+
+function isTextStyles(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+
+  if (value.fontSize !== undefined && typeof value.fontSize !== "number") return false;
+
+  if (value.fontName !== undefined) {
+    if (!isRecord(value.fontName) ||
+      typeof value.fontName.family !== "string" ||
+      typeof value.fontName.style !== "string") {
+      return false;
+    }
+  }
+
+  if (value.lineHeight !== undefined) {
+    if (!isRecord(value.lineHeight) || typeof value.lineHeight.unit !== "string") return false;
+    if (value.lineHeight.value !== undefined && typeof value.lineHeight.value !== "number") return false;
+  }
+
+  if (value.letterSpacing !== undefined) {
+    if (!isRecord(value.letterSpacing) || typeof value.letterSpacing.unit !== "string") return false;
+    if (value.letterSpacing.value !== undefined && typeof value.letterSpacing.value !== "number") return false;
+  }
+
+  if (value.textCase !== undefined && typeof value.textCase !== "string") return false;
+  if (value.textDecoration !== undefined && typeof value.textDecoration !== "string") return false;
+  if (value.hasMixedValues !== undefined && typeof value.hasMixedValues !== "boolean") return false;
+
+  return true;
+}
+
+function isSerializedProperties(value: unknown): value is SerializedProperties {
+  if (!isRecord(value)) return false;
+  if (!SERIALIZED_KEYS.every((key) => Object.prototype.hasOwnProperty.call(value, key))) return false;
+
+  if (typeof value.sourceName !== "string" || value.sourceName === "") return false;
+  if (typeof value.sourceType !== "string" || value.sourceType === "") return false;
+
+  if (value.fills !== null && !isTypedRecordArray(value.fills)) return false;
+  if (typeof value.fillsMixed !== "boolean") return false;
+  if (!isStringOrNull(value.fillStyleId)) return false;
+  if (!isStringOrNull(value.fillStyleName)) return false;
+
+  if (value.strokes !== null && !isTypedRecordArray(value.strokes)) return false;
+  if (!isNumberOrNull(value.strokeWeight)) return false;
+  if (typeof value.strokeWeightMixed !== "boolean") return false;
+  if (value.strokeSideWeights !== null && !isSideWeights(value.strokeSideWeights)) return false;
+  if (value.strokeAlign !== null &&
+    value.strokeAlign !== "CENTER" &&
+    value.strokeAlign !== "INSIDE" &&
+    value.strokeAlign !== "OUTSIDE") {
+    return false;
+  }
+  if (!isStringOrNull(value.strokeCap)) return false;
+  if (typeof value.strokeCapMixed !== "boolean") return false;
+  if (!isStringOrNull(value.strokeJoin)) return false;
+  if (typeof value.strokeJoinMixed !== "boolean") return false;
+  if (value.dashPattern !== null && !isNumberArray(value.dashPattern)) return false;
+  if (!isStringOrNull(value.strokeStyleId)) return false;
+  if (!isStringOrNull(value.strokeStyleName)) return false;
+
+  if (value.effects !== null && !isTypedRecordArray(value.effects)) return false;
+  if (!isStringOrNull(value.effectStyleId)) return false;
+  if (!isStringOrNull(value.effectStyleName)) return false;
+
+  if (!isNumberOrNull(value.cornerRadius)) return false;
+  if (typeof value.cornerRadiusMixed !== "boolean") return false;
+  if (value.cornerRadii !== null && !isCornerRadii(value.cornerRadii)) return false;
+  if (!isNumberOrNull(value.cornerSmoothing)) return false;
+
+  if (!isNumberOrNull(value.opacity)) return false;
+  if (!isStringOrNull(value.blendMode)) return false;
+
+  if (value.textStyles !== null && !isTextStyles(value.textStyles)) return false;
+  if (!isStringOrNull(value.textStyleId)) return false;
+  if (!isStringOrNull(value.textStyleName)) return false;
+
+  if (value.boundVariables !== null && !isStringMap(value.boundVariables)) return false;
+  if (value.boundVariableNames !== null && !isStringMap(value.boundVariableNames)) return false;
+
+  return true;
+}
+
+function isClipboardPayload(value: unknown): value is ClipboardPayload {
+  if (!isRecord(value)) return false;
+  if (value.schema !== STORAGE_SCHEMA || typeof value.savedAt !== "string") return false;
+  return isSerializedProperties(value.data);
+}
+
+function isPrefsPayload(value: unknown): value is PrefsPayload {
+  if (!isRecord(value)) return false;
+  if (value.schema !== STORAGE_SCHEMA) return false;
+
+  const checked = value.checked;
+  if (!isRecord(checked)) return false;
+  return Object.keys(checked).every((key) => typeof checked[key] === "boolean");
+}
+
+async function loadPrefs(): Promise<{ [property: string]: boolean }> {
+  try {
+    const raw = await figma.clientStorage.getAsync(PREFS_KEY);
+    if (raw === undefined) return {};
+    if (isPrefsPayload(raw)) return raw.checked;
+
+    await figma.clientStorage.deleteAsync(PREFS_KEY);
+    return {};
+  } catch (err) {
+    console.error(`[CopyOne] Could not load prefs: ${errorMessage(err)}`);
+    return {};
+  }
+}
+
+async function persistPrefs(checked: { [property: string]: boolean }): Promise<void> {
+  const payload: PrefsPayload = { schema: 1, checked };
+  try {
+    await figma.clientStorage.setAsync(PREFS_KEY, payload);
+  } catch (err) {
+    console.error(`[CopyOne] Could not save prefs: ${errorMessage(err)}`);
+  }
+}
+
+async function loadClipboard(): Promise<StoredProperties | null> {
+  try {
+    const raw = await figma.clientStorage.getAsync(CLIPBOARD_KEY);
+    if (raw === undefined) return null;
+
+    if (!isClipboardPayload(raw)) {
+      await figma.clientStorage.deleteAsync(CLIPBOARD_KEY);
+      return null;
+    }
+
+    return deserializeProperties(raw.data);
+  } catch (err) {
+    console.error(`[CopyOne] Could not restore clipboard: ${errorMessage(err)}`);
+    try {
+      await figma.clientStorage.deleteAsync(CLIPBOARD_KEY);
+    } catch {
+      // Nothing else to do.
+    }
+    return null;
+  }
+}
+
+async function persistClipboard(props: StoredProperties): Promise<void> {
+  const payload: ClipboardPayload = {
+    schema: 1,
+    savedAt: new Date().toISOString(),
+    data: serializeProperties(props),
+  };
+
+  try {
+    await figma.clientStorage.setAsync(CLIPBOARD_KEY, payload);
+  } catch (err) {
+    console.error(`[CopyOne] Could not save clipboard: ${errorMessage(err)}`);
+  }
+}
+
+async function deleteStoredClipboard(): Promise<void> {
+  try {
+    await figma.clientStorage.deleteAsync(CLIPBOARD_KEY);
+  } catch (err) {
+    console.error(`[CopyOne] Could not clear clipboard: ${errorMessage(err)}`);
+  }
+}
+
 function componentToHex(c: number): string {
   const hex = Math.round(c * 255).toString(16);
   return hex.length === 1 ? `0${hex}` : hex;
@@ -635,21 +1085,19 @@ function computeCornerRadiusPreview(props: StoredProperties): string | undefined
   return radius;
 }
 
-function computeOpacityBlendPreview(props: StoredProperties): string | undefined {
-  if (props.opacity === undefined && props.blendMode === undefined) return undefined;
+function sentenceCaseLabel(value: string): string {
+  const spaced = value.replace(/_/g, " ").toLowerCase();
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
 
-  const parts: string[] = [];
+function computeOpacityPreview(props: StoredProperties): string | undefined {
+  if (props.opacity === undefined) return undefined;
+  return `${Math.round(props.opacity * 100)}%`;
+}
 
-  if (props.opacity !== undefined) {
-    parts.push(`${Math.round(props.opacity * 100)}%`);
-  }
-
-  if (props.blendMode !== undefined && props.blendMode !== 'PASS_THROUGH' && props.blendMode !== 'NORMAL') {
-    const modeName = props.blendMode.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
-    parts.push(modeName);
-  }
-
-  return parts.join(', ') || undefined;
+function computeBlendModePreview(props: StoredProperties): string | undefined {
+  if (props.blendMode === undefined) return undefined;
+  return sentenceCaseLabel(props.blendMode);
 }
 
 function computeTextStylesPreview(props: StoredProperties): { text: string; hasMixed: boolean } | undefined {
@@ -694,9 +1142,14 @@ function computeAllPreviews(props: StoredProperties): PropertyPreviews {
     if (cr) previews.cornerRadius = cr;
   }
 
-  if (props.opacity !== undefined || props.blendMode !== undefined) {
-    const ob = computeOpacityBlendPreview(props);
-    if (ob) previews.opacityBlend = ob;
+  if (props.opacity !== undefined) {
+    const opacityPreview = computeOpacityPreview(props);
+    if (opacityPreview) previews.opacity = opacityPreview;
+  }
+
+  if (props.blendMode !== undefined) {
+    const blendPreview = computeBlendModePreview(props);
+    if (blendPreview) previews.blendMode = blendPreview;
   }
 
   if (props.textStyles !== undefined) {
@@ -717,10 +1170,31 @@ function getAvailableProperties(props: StoredProperties): string[] {
   if (props.strokes !== undefined && props.strokes.length > 0) available.push("strokes");
   if (props.effects !== undefined && props.effects.length > 0) available.push("effects");
   if (props.cornerRadius !== undefined || props.cornerRadii !== undefined) available.push("cornerRadius");
-  if (props.opacity !== undefined || props.blendMode !== undefined) available.push("opacityBlend");
+  if (props.opacity !== undefined) available.push("opacity");
+  if (props.blendMode !== undefined) available.push("blendMode");
   if (props.textStyles !== undefined) available.push("textStyles");
 
   return available;
+}
+
+function computeDefaultValued(props: StoredProperties): string[] {
+  const defaults: string[] = [];
+
+  const smoothingDefault = props.cornerSmoothing === undefined || props.cornerSmoothing === 0;
+  const radiusDefault = props.cornerRadii
+    ? props.cornerRadii.topLeft === 0 &&
+      props.cornerRadii.topRight === 0 &&
+      props.cornerRadii.bottomLeft === 0 &&
+      props.cornerRadii.bottomRight === 0
+    : typeof props.cornerRadius === "number" && props.cornerRadius === 0;
+
+  if (smoothingDefault && radiusDefault) defaults.push("cornerRadius");
+  if (props.opacity !== undefined && props.opacity === 1) defaults.push("opacity");
+  if (props.blendMode !== undefined && (props.blendMode === "PASS_THROUGH" || props.blendMode === "NORMAL")) {
+    defaults.push("blendMode");
+  }
+
+  return defaults;
 }
 
 // ============================================================================
@@ -774,8 +1248,7 @@ const STROKE_SIDE_FIELDS: StoredNodeField[] = [
 ];
 
 function layerTypeLabel(node: SceneNode): string {
-  const spaced = node.type.toLowerCase().replace(/_/g, " ");
-  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+  return sentenceCaseLabel(node.type);
 }
 
 function variableNameFor(props: StoredProperties, field: StoredNodeField): string | undefined {
@@ -840,6 +1313,16 @@ async function bindFieldVariable(
   return bindVariableId(node, field, id, variableNameFor(props, field));
 }
 
+function isImagePaintAvailable(paint: Paint): boolean {
+  if (paint.type !== "IMAGE") return true;
+  if (!paint.imageHash) return false;
+  try {
+    return figma.getImageByHash(paint.imageHash) !== null;
+  } catch {
+    return false;
+  }
+}
+
 async function applyFills(node: SceneNode, props: StoredProperties): Promise<ApplyResult> {
   if (props.fills === undefined || props.fills === figma.mixed) return skipped("unsupported-layer");
   if (!("fills" in node)) return skipped("unsupported-layer");
@@ -848,6 +1331,13 @@ async function applyFills(node: SceneNode, props: StoredProperties): Promise<App
     fills: readonly Paint[];
     setFillStyleIdAsync(styleId: string): Promise<void>;
   };
+
+  let imageUnavailable = false;
+  const fillsToApply = Array.from(props.fills).filter((paint) => {
+    if (isImagePaintAvailable(paint)) return true;
+    imageUnavailable = true;
+    return false;
+  });
 
   let styleFallback: string | undefined;
   let hasStyleFallback = false;
@@ -868,9 +1358,17 @@ async function applyFills(node: SceneNode, props: StoredProperties): Promise<App
     }
   }
 
+  if (fillsToApply.length === 0) {
+    return imageUnavailable ? skipped("image-unavailable") : skipped("unsupported-layer");
+  }
+
+  const notes: ApplyNote[] = [];
+  if (hasStyleFallback) addNote(notes, note("style-unavailable", styleFallback));
+  if (imageUnavailable) addNote(notes, note("image-unavailable"));
+
   try {
-    fillNode.fills = Array.from(props.fills);
-    return hasStyleFallback ? applied([note("style-unavailable", styleFallback)]) : applied();
+    fillNode.fills = fillsToApply;
+    return applied(notes);
   } catch (err) {
     return failed("error", errorMessage(err));
   }
@@ -1149,41 +1647,31 @@ async function applyCornerRadius(node: SceneNode, props: StoredProperties): Prom
   return applied(notes);
 }
 
-async function applyOpacityBlend(node: SceneNode, props: StoredProperties): Promise<ApplyResult> {
-  if (props.opacity === undefined && props.blendMode === undefined) return skipped("unsupported-layer");
+async function applyOpacity(node: SceneNode, props: StoredProperties): Promise<ApplyResult> {
+  if (props.opacity === undefined) return skipped("unsupported-layer");
+  if (!("opacity" in node)) return skipped("unsupported-layer");
 
-  const supportsOpacity = "opacity" in node;
-  const supportsBlend = "blendMode" in node;
-  if (!supportsOpacity && !supportsBlend) return skipped("unsupported-layer");
-
-  const blendNode = node as SceneNode & { opacity: number; blendMode: BlendMode };
-  let didApply = false;
-
-  if (supportsOpacity && props.opacity !== undefined) {
-    try {
-      blendNode.opacity = props.opacity;
-      didApply = true;
-    } catch {
-      // Opacity stays untouched.
-    }
-  }
-
-  if (supportsBlend && props.blendMode !== undefined) {
-    try {
-      blendNode.blendMode = props.blendMode;
-      didApply = true;
-    } catch {
-      // Blend mode stays untouched.
-    }
+  try {
+    (node as SceneNode & { opacity: number }).opacity = props.opacity;
+  } catch (err) {
+    return failed("error", errorMessage(err));
   }
 
   const notes: ApplyNote[] = [];
-  if (supportsOpacity) {
-    addNote(notes, await bindFieldVariable(node, "opacity", props));
-  }
-
-  if (!didApply) return failed("error");
+  addNote(notes, await bindFieldVariable(node, "opacity", props));
   return applied(notes);
+}
+
+async function applyBlendMode(node: SceneNode, props: StoredProperties): Promise<ApplyResult> {
+  if (props.blendMode === undefined) return skipped("unsupported-layer");
+  if (!("blendMode" in node)) return skipped("unsupported-layer");
+
+  try {
+    (node as SceneNode & { blendMode: BlendMode }).blendMode = props.blendMode;
+    return applied();
+  } catch (err) {
+    return failed("error", errorMessage(err));
+  }
 }
 
 function getMissingFontDetail(textNode: TextNode): string | undefined {
@@ -1345,8 +1833,11 @@ async function applyProperties(node: SceneNode, props: StoredProperties, propert
       case "cornerRadius":
         result = await applyCornerRadius(node, props);
         break;
-      case "opacityBlend":
-        result = await applyOpacityBlend(node, props);
+      case "opacity":
+        result = await applyOpacity(node, props);
+        break;
+      case "blendMode":
+        result = await applyBlendMode(node, props);
         break;
       case "textStyles":
         result = await applyTextStyles(node, props);
@@ -1555,11 +2046,13 @@ function sendSelectionUpdate(): void {
     figma.ui.postMessage({
       type: "selection-changed",
       hasSelection: false,
+      count: 0,
     } as MessageToUI);
   } else if (selection.length === 1) {
     figma.ui.postMessage({
       type: "selection-changed",
       hasSelection: true,
+      count: 1,
       nodeName: selection[0].name,
       nodeType: selection[0].type,
     } as MessageToUI);
@@ -1567,7 +2060,8 @@ function sendSelectionUpdate(): void {
     figma.ui.postMessage({
       type: "selection-changed",
       hasSelection: true,
-      nodeName: `${selection.length} elements`,
+      count: selection.length,
+      nodeName: `${selection.length} layers`,
       nodeType: "MULTIPLE",
     } as MessageToUI);
   }
@@ -1577,13 +2071,41 @@ function sendSelectionUpdate(): void {
 // Message Handling
 // ============================================================================
 
+function sendPropertiesCopied(properties: StoredProperties, restored: boolean): void {
+  const availableProperties = getAvailableProperties(properties);
+  const defaultValued = computeDefaultValued(properties);
+  const mixed: string[] = [];
+  if (properties.sourceType === "TEXT" && properties.fills === figma.mixed) {
+    mixed.push("fills");
+  }
+  const previews = computeAllPreviews(properties);
+
+  figma.ui.postMessage({
+    type: "properties-copied",
+    sourceName: properties.sourceName,
+    sourceType: properties.sourceType,
+    availableProperties,
+    defaultValued,
+    mixed,
+    previews,
+    restored,
+  } as MessageToUI);
+
+  if (properties.textStyles?.hasMixedValues) {
+    figma.ui.postMessage({
+      type: "info",
+      message: "Some text styles were skipped due to mixed values.",
+    } as MessageToUI);
+  }
+}
+
 async function handleCopy(): Promise<void> {
   const selection = figma.currentPage.selection;
 
   if (selection.length === 0) {
     figma.ui.postMessage({
       type: "error",
-      message: "Please select an element first",
+      message: "Please select a layer first",
     } as MessageToUI);
     return;
   }
@@ -1591,7 +2113,7 @@ async function handleCopy(): Promise<void> {
   if (selection.length > 1) {
     figma.ui.postMessage({
       type: "error",
-      message: "Please select only one element to copy from",
+      message: "Please select only one layer to copy from",
     } as MessageToUI);
     return;
   }
@@ -1612,23 +2134,9 @@ async function handleCopy(): Promise<void> {
   }
 
   setStored(properties);
-  const availableProperties = getAvailableProperties(properties);
-  const previews = computeAllPreviews(properties);
-
-  figma.ui.postMessage({
-    type: "properties-copied",
-    sourceName: properties.sourceName,
-    sourceType: properties.sourceType,
-    availableProperties,
-    previews,
-  } as MessageToUI);
-
-  if (properties.textStyles?.hasMixedValues) {
-    figma.ui.postMessage({
-      type: "info",
-      message: "Some text styles were skipped due to mixed values.",
-    } as MessageToUI);
-  }
+  clipboardChangedSinceStartup = true;
+  await persistClipboard(properties);
+  sendPropertiesCopied(properties, false);
 }
 
 async function handlePaste(propertiesToPaste: string[]): Promise<void> {
@@ -1647,7 +2155,7 @@ async function handlePaste(propertiesToPaste: string[]): Promise<void> {
   if (selection.length === 0) {
     figma.ui.postMessage({
       type: "error",
-      message: "Please select target element(s) first",
+      message: "Please select target layers first",
     } as MessageToUI);
     return;
   }
@@ -1720,11 +2228,37 @@ async function handlePaste(propertiesToPaste: string[]): Promise<void> {
 // Plugin Initialization
 // ============================================================================
 
+async function initializeStorage(): Promise<void> {
+  const prefs = await loadPrefs();
+  if (!prefsChangedSinceStartup) {
+    figma.ui.postMessage({
+      type: "prefs",
+      checked: prefs,
+    } as MessageToUI);
+  }
+
+  const restored = await loadClipboard();
+  if (clipboardChangedSinceStartup || !restored) return;
+
+  setStored(restored);
+  sendPropertiesCopied(restored, true);
+}
+
+async function handleClearClipboard(): Promise<void> {
+  clipboardChangedSinceStartup = true;
+  setStored(null);
+  await deleteStoredClipboard();
+  figma.ui.postMessage({
+    type: "clipboard-cleared",
+  } as MessageToUI);
+}
+
 // Show the UI panel
 figma.showUI(__html__, {
   width: UI_WIDTH,
   height: 560,
   title: "CopyOne",
+  themeColors: true,
 });
 
 figma.ui.postMessage({
@@ -1749,6 +2283,11 @@ figma.on("selectionchange", () => {
 // Send initial selection state
 sendSelectionUpdate();
 
+// Restore the clipboard and prefs after the UI can receive messages.
+initializeStorage().catch((err) => {
+  console.error(`[CopyOne] Could not initialize storage: ${errorMessage(err)}`);
+});
+
 // Handle messages from UI
 figma.ui.onmessage = async (msg: MessageToPlugin) => {
   switch (msg.type) {
@@ -1760,6 +2299,22 @@ figma.ui.onmessage = async (msg: MessageToPlugin) => {
       break;
     case "get-selection":
       sendSelectionUpdate();
+      break;
+    case "save-prefs": {
+      const checked: { [property: string]: boolean } = {};
+      if (isRecord(msg.checked)) {
+        for (const key of Object.keys(msg.checked)) {
+          if (typeof msg.checked[key] === "boolean") {
+            checked[key] = msg.checked[key];
+          }
+        }
+      }
+      prefsChangedSinceStartup = true;
+      await persistPrefs(checked);
+      break;
+    }
+    case "clear-clipboard":
+      await handleClearClipboard();
       break;
     case "resize-ui":
       if (Number.isFinite(msg.height)) {
