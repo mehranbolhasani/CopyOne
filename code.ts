@@ -128,6 +128,8 @@ interface ApplyResult {
 
 type PropertyResults = { [property: string]: ApplyResult };
 
+type MessageLevel = "success" | "warning" | "error";
+
 // Message types for communication between UI and plugin
 type MessageToPlugin =
   | { type: "copy" }
@@ -139,8 +141,9 @@ type MessageToUI =
   | { type: "version"; version: string }
   | { type: "build-info"; devLabel: string; buildStamp: string }
   | { type: "selection-changed"; hasSelection: boolean; nodeName?: string; nodeType?: string }
+  | { type: "property-labels"; labels: { [property: string]: string } }
   | { type: "properties-copied"; sourceName: string; sourceType: string; availableProperties: string[]; previews: PropertyPreviews }
-  | { type: "paste-complete"; success: boolean; message: string }
+  | { type: "paste-complete"; level: MessageLevel; message: string; moreSentences?: string[] }
   | { type: "info"; message: string }
   | { type: "error"; message: string };
 
@@ -176,6 +179,45 @@ const BOUND_VARIABLE_FIELDS: StoredNodeField[] = [
   "strokeLeftWeight",
   "opacity",
 ];
+
+// Single source of property display names. The UI receives this map at startup
+// so labels in the panel and paste messages cannot drift apart.
+const PROPERTY_LABELS: { [property: string]: string } = {
+  fills: "Fills",
+  strokes: "Strokes",
+  effects: "Effects",
+  cornerRadius: "Corner radius",
+  opacityBlend: "Opacity & blend",
+  textStyles: "Text styles",
+};
+
+const NOTE_REASON_ORDER: ApplyReason[] = [
+  "missing-font",
+  "unsupported-layer",
+  "error",
+  "style-unavailable",
+  "variable-unavailable",
+  "variable-not-bindable",
+  "image-unavailable",
+];
+
+interface PasteNoteGroup {
+  property: string;
+  reason: ApplyReason;
+  detail?: string;
+  layers: Set<number>;
+}
+
+interface NoteSentence {
+  reason: ApplyReason;
+  text: string;
+}
+
+interface PasteFeedback {
+  level: MessageLevel;
+  message: string;
+  moreSentences: string[];
+}
 
 interface BoundVariableSource {
   readonly boundVariables?: { [field: string]: VariableAlias | undefined };
@@ -701,6 +743,10 @@ function failed(reason?: ApplyReason, detail?: string): ApplyResult {
   return { status: "failed", notes: reason ? [note(reason, detail)] : [] };
 }
 
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 function addNote(notes: ApplyNote[], next: ApplyNote | null): void {
   if (!next) return;
   const duplicate = notes.some((existing) => existing.reason === next.reason && existing.detail === next.detail);
@@ -825,8 +871,8 @@ async function applyFills(node: SceneNode, props: StoredProperties): Promise<App
   try {
     fillNode.fills = Array.from(props.fills);
     return hasStyleFallback ? applied([note("style-unavailable", styleFallback)]) : applied();
-  } catch {
-    return failed("error");
+  } catch (err) {
+    return failed("error", errorMessage(err));
   }
 }
 
@@ -1022,8 +1068,8 @@ async function applyEffects(node: SceneNode, props: StoredProperties): Promise<A
   try {
     effectNode.effects = Array.from(props.effects);
     return hasStyleFallback ? applied([note("style-unavailable", styleFallback)]) : applied();
-  } catch {
-    return failed("error");
+  } catch (err) {
+    return failed("error", errorMessage(err));
   }
 }
 
@@ -1317,6 +1363,188 @@ async function applyProperties(node: SceneNode, props: StoredProperties, propert
 }
 
 // ============================================================================
+// Paste feedback
+// ============================================================================
+
+function propertyLabel(property: string): string {
+  return PROPERTY_LABELS[property] || property;
+}
+
+function pluralLayers(count: number): string {
+  return `${count} layer${count === 1 ? "" : "s"}`;
+}
+
+function unsupportedHint(property: string): string {
+  switch (property) {
+    case "textStyles":
+      return "not text";
+    case "fills":
+      return "no fill support";
+    case "strokes":
+      return "no stroke support";
+    case "effects":
+      return "no effect support";
+    case "cornerRadius":
+      return "no corner radius support";
+    default:
+      return "not supported";
+  }
+}
+
+function addNoteGroup(
+  groups: PasteNoteGroup[],
+  groupIndex: { [key: string]: PasteNoteGroup },
+  property: string,
+  reason: ApplyReason,
+  detail: string | undefined,
+  layerIndex: number
+): void {
+  const key = reason === "error"
+    ? `${property}|error`
+    : `${property}|${reason}|${detail || ""}`;
+
+  let group = groupIndex[key];
+  if (!group) {
+    group = { property, reason, detail, layers: new Set<number>() };
+    groupIndex[key] = group;
+    groups.push(group);
+  }
+
+  group.layers.add(layerIndex);
+}
+
+function sentenceForGroup(group: PasteNoteGroup): string | null {
+  const label = propertyLabel(group.property);
+  const count = group.layers.size;
+
+  switch (group.reason) {
+    case "missing-font":
+      return `${label} skipped on ${pluralLayers(count)} (${group.detail ? `font “${group.detail}” is missing` : "font is missing"}).`;
+    case "unsupported-layer":
+      return `${label} skipped on ${pluralLayers(count)} (${unsupportedHint(group.property)}).`;
+    case "error":
+      return `Something went wrong pasting ${label.toLowerCase()}.`;
+    case "style-unavailable":
+      return group.detail
+        ? `Style “${group.detail}” isn't in this file, so its values were used.`
+        : `A style isn't in this file, so its values were used.`;
+    case "variable-unavailable":
+      return group.detail
+        ? `Variable “${group.detail}” isn't in this file, so its value was used.`
+        : `A variable isn't in this file, so its value was used.`;
+    case "image-unavailable":
+      return `Image fill isn't available in this file and was skipped.`;
+    default:
+      return null;
+  }
+}
+
+function sentenceForVariableNotBindable(property: string, groups: PasteNoteGroup[]): string {
+  const layers = new Set<number>();
+  const layerTypes: string[] = [];
+
+  for (const group of groups) {
+    group.layers.forEach((layer) => layers.add(layer));
+    if (group.detail) {
+      const type = group.detail.toLowerCase();
+      if (layerTypes.indexOf(type) === -1) layerTypes.push(type);
+    }
+  }
+
+  const label = propertyLabel(property);
+  const count = layers.size;
+
+  if (layerTypes.length === 1) {
+    const type = layerTypes[0];
+    if (count === 1) {
+      return `${label} variable can't be used on a ${type} layer, so the value was used.`;
+    }
+    return `${label} variable can't be used on ${type} layers, so the value was used.`;
+  }
+
+  return `${label} variable can't be used on ${pluralLayers(count)}, so the value was used.`;
+}
+
+function buildNoteSentences(groups: PasteNoteGroup[]): NoteSentence[] {
+  const sentences: NoteSentence[] = [];
+  const variableGroups: { [property: string]: PasteNoteGroup[] } = {};
+
+  for (const group of groups) {
+    if (group.reason === "variable-not-bindable") {
+      if (!variableGroups[group.property]) variableGroups[group.property] = [];
+      variableGroups[group.property].push(group);
+      continue;
+    }
+
+    const text = sentenceForGroup(group);
+    if (text) sentences.push({ reason: group.reason, text });
+  }
+
+  for (const property of Object.keys(variableGroups)) {
+    sentences.push({
+      reason: "variable-not-bindable",
+      text: sentenceForVariableNotBindable(property, variableGroups[property]),
+    });
+  }
+
+  const ordered: NoteSentence[] = [];
+  for (const reason of NOTE_REASON_ORDER) {
+    for (const sentence of sentences) {
+      if (sentence.reason === reason) ordered.push(sentence);
+    }
+  }
+  for (const sentence of sentences) {
+    if (NOTE_REASON_ORDER.indexOf(sentence.reason) === -1) ordered.push(sentence);
+  }
+
+  return ordered;
+}
+
+function buildPasteFeedback(
+  appliedLayerCount: number,
+  selectionCount: number,
+  allApplied: boolean,
+  groups: PasteNoteGroup[]
+): PasteFeedback {
+  const sentences = buildNoteSentences(groups);
+  const shown = sentences.slice(0, 2);
+  const moreSentences = sentences.slice(2).map((sentence) => sentence.text);
+
+  if (appliedLayerCount === 0) {
+    const everyNoteIsUnsupported = groups.length > 0 &&
+      groups.every((group) => group.reason === "unsupported-layer");
+
+    if (groups.length === 0 || everyNoteIsUnsupported) {
+      return {
+        level: "error",
+        message: "Nothing was pasted. None of the selected layers support these properties.",
+        moreSentences: [],
+      };
+    }
+
+    let message = "Nothing was pasted.";
+    if (shown.length > 0) {
+      message += " " + shown.map((sentence) => sentence.text).join(" ");
+    }
+    return { level: "error", message, moreSentences };
+  }
+
+  let message = appliedLayerCount === selectionCount
+    ? `Pasted to ${pluralLayers(appliedLayerCount)}.`
+    : `Pasted to ${appliedLayerCount} of ${pluralLayers(selectionCount)}.`;
+
+  if (shown.length > 0) {
+    message += " " + shown.map((sentence) => sentence.text).join(" ");
+  }
+
+  return {
+    level: allApplied && sentences.length === 0 ? "success" : "warning",
+    message,
+    moreSentences,
+  };
+}
+
+// ============================================================================
 // Selection Handling
 // ============================================================================
 
@@ -1401,8 +1629,6 @@ async function handleCopy(): Promise<void> {
       message: "Some text styles were skipped due to mixed values.",
     } as MessageToUI);
   }
-
-  figma.notify(`Copied properties from "${node.name}"`);
 }
 
 async function handlePaste(propertiesToPaste: string[]): Promise<void> {
@@ -1434,37 +1660,60 @@ async function handlePaste(propertiesToPaste: string[]): Promise<void> {
     return;
   }
 
-  let totalSuccess = 0;
-  let totalFailed = 0;
-  let totalSkipped = 0;
+  const groups: PasteNoteGroup[] = [];
+  const groupIndex: { [key: string]: PasteNoteGroup } = {};
+  let appliedLayerCount = 0;
+  let allApplied = true;
 
-  for (const node of selection) {
-    const result = await applyProperties(node, stored, propertiesToPaste);
-    for (const prop of Object.keys(result)) {
-      const propertyResult = result[prop];
+  for (let layerIndex = 0; layerIndex < selection.length; layerIndex++) {
+    const node = selection[layerIndex];
+    let results: PropertyResults = {};
+    let layerApplied = false;
+    let layerAllApplied = true;
+
+    try {
+      results = await applyProperties(node, stored, propertiesToPaste);
+    } catch (err) {
+      console.error(`[CopyOne] Paste failed on ${node.type} "${node.name}": ${errorMessage(err)}`);
+      layerAllApplied = false;
+    }
+
+    for (const property of propertiesToPaste) {
+      const propertyResult = results[property];
+      if (!propertyResult) {
+        layerAllApplied = false;
+        addNoteGroup(groups, groupIndex, property, "error", undefined, layerIndex);
+        continue;
+      }
+
       if (propertyResult.status === "applied") {
-        totalSuccess++;
-      } else if (propertyResult.status === "skipped") {
-        totalSkipped++;
-      } else {
-        totalFailed++;
+        layerApplied = true;
+      }
+      if (propertyResult.status !== "applied" || propertyResult.notes.length > 0) {
+        layerAllApplied = false;
+      }
+
+      for (const applyNote of propertyResult.notes) {
+        if (applyNote.reason === "error" && applyNote.detail) {
+          console.error(`[CopyOne] Failed to paste ${property} on ${node.type} "${node.name}": ${applyNote.detail}`);
+        }
+        addNoteGroup(groups, groupIndex, property, applyNote.reason, applyNote.detail, layerIndex);
       }
     }
+
+    if (layerApplied) appliedLayerCount++;
+    if (!layerAllApplied) allApplied = false;
   }
 
   figma.commitUndo();
 
-  const message = totalFailed > 0 || totalSkipped > 0
-    ? `Applied ${totalSuccess} properties. ${totalFailed + totalSkipped} couldn't be applied (incompatible node types).`
-    : `Successfully applied ${totalSuccess} properties to ${selection.length} element(s).`;
-
+  const feedback = buildPasteFeedback(appliedLayerCount, selection.length, allApplied, groups);
   figma.ui.postMessage({
     type: "paste-complete",
-    success: totalFailed === 0 && totalSkipped === 0,
-    message,
+    level: feedback.level,
+    message: feedback.message,
+    moreSentences: feedback.moreSentences,
   } as MessageToUI);
-
-  figma.notify(message);
 }
 
 // ============================================================================
@@ -1481,6 +1730,10 @@ figma.showUI(__html__, {
 figma.ui.postMessage({
   type: "version",
   version: PLUGIN_VERSION,
+} as MessageToUI);
+figma.ui.postMessage({
+  type: "property-labels",
+  labels: PROPERTY_LABELS,
 } as MessageToUI);
 figma.ui.postMessage({
   type: "build-info",

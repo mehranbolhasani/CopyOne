@@ -26,9 +26,12 @@
       --success: #1bc47d;
       --success-bg: rgba(27, 196, 125, 0.1);
       --success-border: rgba(27, 196, 125, 0.3);
-      --warning: #f24822;
-      --warning-bg: rgba(242, 72, 34, 0.1);
-      --warning-border: rgba(242, 72, 34, 0.3);
+      --caution: #b45309;
+      --caution-bg: rgba(217, 119, 6, 0.12);
+      --caution-border: rgba(217, 119, 6, 0.35);
+      --danger: #f24822;
+      --danger-bg: rgba(242, 72, 34, 0.1);
+      --danger-border: rgba(242, 72, 34, 0.3);
       --info-bg: rgba(79, 70, 229, 0.08);
       --info-border: rgba(79, 70, 229, 0.2);
       --border: #dadce0;
@@ -57,9 +60,12 @@
         --success: #34d399;
         --success-bg: rgba(52, 211, 153, 0.1);
         --success-border: rgba(52, 211, 153, 0.25);
-        --warning: #f87171;
-        --warning-bg: rgba(248, 113, 113, 0.1);
-        --warning-border: rgba(248, 113, 113, 0.25);
+        --caution: #fbbf24;
+        --caution-bg: rgba(251, 191, 36, 0.12);
+        --caution-border: rgba(251, 191, 36, 0.3);
+        --danger: #f87171;
+        --danger-bg: rgba(248, 113, 113, 0.1);
+        --danger-border: rgba(248, 113, 113, 0.25);
         --info-bg: rgba(165, 180, 252, 0.1);
         --info-border: rgba(165, 180, 252, 0.18);
         --border: #3c4043;
@@ -397,7 +403,7 @@
     }
 
     .preview-text.partial {
-      color: var(--warning);
+      color: var(--caution);
     }
 
     .preview-swatches {
@@ -498,11 +504,58 @@
       border-radius: var(--radius);
       font-size: 11px;
       display: none;
+      align-items: flex-start;
+      gap: 8px;
       line-height: 1.4;
     }
 
     .message.visible {
-      display: block;
+      display: flex;
+    }
+
+    .message-text {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .message-more {
+      display: none;
+      margin-left: 4px;
+      padding: 0;
+      border: none;
+      background: transparent;
+      color: var(--accent);
+      font: inherit;
+      font-weight: 500;
+      cursor: pointer;
+      text-decoration: none;
+    }
+
+    .message-more:hover {
+      text-decoration: underline;
+    }
+
+    .message-dismiss {
+      display: none;
+      flex-shrink: 0;
+      align-items: center;
+      justify-content: center;
+      padding: 0 2px;
+      border: none;
+      background: transparent;
+      color: inherit;
+      font-size: 14px;
+      line-height: 1;
+      cursor: pointer;
+      opacity: 0.8;
+    }
+
+    .message-dismiss:hover {
+      opacity: 1;
+    }
+
+    .message.error .message-dismiss {
+      display: inline-flex;
     }
 
     .message.success {
@@ -511,10 +564,16 @@
       color: var(--success);
     }
 
+    .message.warning {
+      background: var(--caution-bg);
+      border: 1px solid var(--caution-border);
+      color: var(--caution);
+    }
+
     .message.error {
-      background: var(--warning-bg);
-      border: 1px solid var(--warning-border);
-      color: var(--warning);
+      background: var(--danger-bg);
+      border: 1px solid var(--danger-border);
+      color: var(--danger);
     }
 
     .message.info {
@@ -690,7 +749,10 @@
           <span class="shortcut-hint">&#8984;&#8997;V</span>
         </button>
         <div class="paste-hint" id="pasteHint">Select target element(s) to paste</div>
-        <div class="message" id="message"></div>
+        <div class="message" id="message" role="status" aria-live="polite">
+          <span class="message-text" id="messageText"><span id="messageBody"></span><button type="button" class="message-more" id="messageMore" aria-expanded="false"></button></span>
+          <button type="button" class="message-dismiss" id="messageDismiss" aria-label="Dismiss">&times;</button>
+        </div>
       </div>
     </div>
   </div>
@@ -707,6 +769,9 @@
     var copyBtn = document.getElementById('copyBtn');
     var pasteBtn = document.getElementById('pasteBtn');
     var message = document.getElementById('message');
+    var messageBody = document.getElementById('messageBody');
+    var messageMore = document.getElementById('messageMore');
+    var messageDismiss = document.getElementById('messageDismiss');
     var emptyState = document.getElementById('emptyState');
     var pasteContents = document.getElementById('pasteContents');
     var selectAllCb = document.getElementById('selectAllCb');
@@ -928,6 +993,17 @@
       pasteContents.style.display = '';
     }
 
+    function applyPropertyLabels(labels) {
+      if (!labels) return;
+      Object.keys(labels).forEach(function (prop) {
+        var item = document.querySelector('[data-property="' + prop + '"]');
+        if (!item) return;
+        var nameEl = item.querySelector('.name');
+        if (nameEl) nameEl.textContent = labels[prop];
+      });
+      requestResize();
+    }
+
     function updatePropertiesUI(data) {
       showPasteContents();
       availableProperties = data.availableProperties;
@@ -984,21 +1060,40 @@
     }
 
     var messageTimer = null;
+    var currentMoreSentences = [];
 
-    function showMessage(text, type) {
+    function showMessage(text, level, moreSentences) {
       if (messageTimer) {
         clearTimeout(messageTimer);
         messageTimer = null;
       }
-      message.textContent = text;
-      message.className = 'message visible ' + type;
+      currentMoreSentences = moreSentences || [];
+      messageBody.textContent = text;
+      messageMore.textContent = currentMoreSentences.length ? currentMoreSentences.length + ' more' : '';
+      messageMore.style.display = currentMoreSentences.length ? 'inline' : 'none';
+      messageMore.setAttribute('aria-expanded', 'false');
+      message.className = 'message visible ' + level;
 
-      if (type !== 'error') {
+      var duration = level === 'warning' ? 8000 : (level === 'error' ? 0 : 4000);
+      if (duration > 0) {
         messageTimer = setTimeout(function () {
           message.classList.remove('visible');
           messageTimer = null;
           requestResize();
-        }, 4000);
+        }, duration);
+      }
+      requestResize();
+    }
+
+    function revealMore() {
+      if (currentMoreSentences.length === 0) return;
+      messageBody.textContent += ' ' + currentMoreSentences.join(' ');
+      currentMoreSentences = [];
+      messageMore.setAttribute('aria-expanded', 'true');
+      messageMore.style.display = 'none';
+      if (messageTimer) {
+        clearTimeout(messageTimer);
+        messageTimer = null;
       }
       requestResize();
     }
@@ -1013,6 +1108,14 @@
     }
 
     // Event Listeners
+
+    messageMore.addEventListener('click', function () {
+      revealMore();
+    });
+
+    messageDismiss.addEventListener('click', function () {
+      dismissMessage();
+    });
 
     copyBtn.addEventListener('click', function () {
       dismissMessage();
@@ -1054,6 +1157,9 @@
           versionLabel.textContent = 'v' + msg.version;
           requestResize();
           break;
+        case 'property-labels':
+          applyPropertyLabels(msg.labels);
+          break;
         case 'selection-changed':
           updateSelectionUI(msg);
           break;
@@ -1061,7 +1167,7 @@
           updatePropertiesUI(msg);
           break;
         case 'paste-complete':
-          showMessage(msg.message, msg.success ? 'success' : 'error');
+          showMessage(msg.message, msg.level, msg.moreSentences);
           break;
         case 'info':
           showMessage(msg.message, 'info');
